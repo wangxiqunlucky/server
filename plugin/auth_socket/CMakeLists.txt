@@ -67,3 +67,4 @@ ENDIF()
 IF(ok)
   MYSQL_ADD_PLUGIN(auth_socket auth_socket.c)
 ENDIF()
+

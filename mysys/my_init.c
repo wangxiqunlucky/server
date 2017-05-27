@@ -99,7 +99,7 @@ my_bool my_init(void)
   if (my_progname)
     my_progname_short= my_progname + dirname_length(my_progname);
 
-  /* Initialize our mutex handling */
+  /* Initalize our mutex handling */
   my_mutex_init();
 
   if (my_thread_global_init())
@@ -415,7 +415,7 @@ static my_bool win32_init_tcp_ip()
     WORD wVersionRequested = MAKEWORD( 2, 2 );
     WSADATA wsaData;
  	/* Be a good citizen: maybe another lib has already initialised
- 		sockets, so don't clobber them unless necessary */
+ 		sockets, so dont clobber them unless necessary */
     if (WSAStartup( wVersionRequested, &wsaData ))
     {
       /* Load failed, maybe because of previously loaded
@@ -454,8 +454,7 @@ PSI_mutex_key key_LOCK_localtime_r;
 #endif /* !defined(HAVE_LOCALTIME_R) || !defined(HAVE_GMTIME_R) */
 
 PSI_mutex_key key_BITMAP_mutex, key_IO_CACHE_append_buffer_lock,
-  key_IO_CACHE_SHARE_mutex, key_KEY_CACHE_cache_lock,
-  key_LOCK_alarm, key_LOCK_timer,
+  key_IO_CACHE_SHARE_mutex, key_KEY_CACHE_cache_lock, key_LOCK_alarm,
   key_my_thread_var_mutex, key_THR_LOCK_charset, key_THR_LOCK_heap,
   key_THR_LOCK_lock, key_THR_LOCK_malloc,
   key_THR_LOCK_mutex, key_THR_LOCK_myisam, key_THR_LOCK_net,
@@ -475,7 +474,6 @@ static PSI_mutex_info all_mysys_mutexes[]=
   { &key_IO_CACHE_SHARE_mutex, "IO_CACHE::SHARE_mutex", 0},
   { &key_KEY_CACHE_cache_lock, "KEY_CACHE::cache_lock", 0},
   { &key_LOCK_alarm, "LOCK_alarm", PSI_FLAG_GLOBAL},
-  { &key_LOCK_timer, "LOCK_timer", PSI_FLAG_GLOBAL},
   { &key_my_thread_var_mutex, "my_thread_var::mutex", 0},
   { &key_THR_LOCK_charset, "THR_LOCK_charset", PSI_FLAG_GLOBAL},
   { &key_THR_LOCK_heap, "THR_LOCK_heap", PSI_FLAG_GLOBAL},
@@ -491,14 +489,13 @@ static PSI_mutex_info all_mysys_mutexes[]=
   { &key_LOCK_uuid_generator, "LOCK_uuid_generator", PSI_FLAG_GLOBAL }
 };
 
-PSI_cond_key key_COND_alarm, key_COND_timer, key_IO_CACHE_SHARE_cond,
+PSI_cond_key key_COND_alarm, key_IO_CACHE_SHARE_cond,
   key_IO_CACHE_SHARE_cond_writer, key_my_thread_var_suspend,
   key_THR_COND_threads, key_WT_RESOURCE_cond;
 
 static PSI_cond_info all_mysys_conds[]=
 {
   { &key_COND_alarm, "COND_alarm", PSI_FLAG_GLOBAL},
-  { &key_COND_timer, "COND_timer", PSI_FLAG_GLOBAL},
   { &key_IO_CACHE_SHARE_cond, "IO_CACHE_SHARE::cond", 0},
   { &key_IO_CACHE_SHARE_cond_writer, "IO_CACHE_SHARE::cond_writer", 0},
   { &key_my_thread_var_suspend, "my_thread_var::suspend", 0},
@@ -515,17 +512,12 @@ static PSI_rwlock_info all_mysys_rwlocks[]=
 
 #ifdef USE_ALARM_THREAD
 PSI_thread_key key_thread_alarm;
-#endif
-PSI_thread_key key_thread_timer;
 
 static PSI_thread_info all_mysys_threads[]=
 {
-#ifdef USE_ALARM_THREAD
-  { &key_thread_alarm, "alarm", PSI_FLAG_GLOBAL},
-#endif
-  { &key_thread_timer, "statement_timer", PSI_FLAG_GLOBAL}
+  { &key_thread_alarm, "alarm", PSI_FLAG_GLOBAL}
 };
-
+#endif /* USE_ALARM_THREAD */
 
 #ifdef HUGETLB_USE_PROC_MEMINFO
 PSI_file_key key_file_proc_meminfo;
@@ -560,8 +552,10 @@ void my_init_mysys_psi_keys()
   count= sizeof(all_mysys_rwlocks)/sizeof(all_mysys_rwlocks[0]);
   mysql_rwlock_register(category, all_mysys_rwlocks, count);
 
+#ifdef USE_ALARM_THREAD
   count= sizeof(all_mysys_threads)/sizeof(all_mysys_threads[0]);
   mysql_thread_register(category, all_mysys_threads, count);
+#endif /* USE_ALARM_THREAD */
 
   count= sizeof(all_mysys_files)/sizeof(all_mysys_files[0]);
   mysql_file_register(category, all_mysys_files, count);

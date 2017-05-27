@@ -111,7 +111,7 @@
 
 #define LF_PINBOX_MAX_PINS 65536
 
-static void lf_pinbox_real_free(LF_PINS *pins);
+static void _lf_pinbox_real_free(LF_PINS *pins);
 
 /*
   Initialize a pinbox. Normally called from lf_alloc_init.
@@ -139,7 +139,7 @@ void lf_pinbox_destroy(LF_PINBOX *pinbox)
   Get pins from a pinbox. Usually called via lf_alloc_get_pins() or
   lf_hash_get_pins().
 
-  SYNOPSIS
+  SYNOPSYS
     pinbox      -
 
   DESCRIPTION
@@ -150,7 +150,7 @@ void lf_pinbox_destroy(LF_PINBOX *pinbox)
     It is assumed that pins belong to a thread and are not transferable
     between threads.
 */
-LF_PINS *lf_pinbox_get_pins(LF_PINBOX *pinbox)
+LF_PINS *_lf_pinbox_get_pins(LF_PINBOX *pinbox)
 {
   struct st_my_thread_var *var;
   uint32 pins, next, top_ver;
@@ -177,12 +177,12 @@ LF_PINS *lf_pinbox_get_pins(LF_PINBOX *pinbox)
         note that the first allocated element has index 1 (pins==1).
         index 0 is reserved to mean "NULL pointer"
       */
-      el= (LF_PINS *)lf_dynarray_lvalue(&pinbox->pinarray, pins);
+      el= (LF_PINS *)_lf_dynarray_lvalue(&pinbox->pinarray, pins);
       if (unlikely(!el))
         return 0;
       break;
     }
-    el= (LF_PINS *)lf_dynarray_value(&pinbox->pinarray, pins);
+    el= (LF_PINS *)_lf_dynarray_value(&pinbox->pinarray, pins);
     next= el->link;
   } while (!my_atomic_cas32((int32 volatile*) &pinbox->pinstack_top_ver,
                             (int32*) &top_ver,
@@ -212,7 +212,7 @@ LF_PINS *lf_pinbox_get_pins(LF_PINBOX *pinbox)
     empty the purgatory (XXX deadlock warning below!),
     push LF_PINS structure to a stack
 */
-void lf_pinbox_put_pins(LF_PINS *pins)
+void _lf_pinbox_put_pins(LF_PINS *pins)
 {
   LF_PINBOX *pinbox= pins->pinbox;
   uint32 top_ver, nr;
@@ -229,15 +229,19 @@ void lf_pinbox_put_pins(LF_PINS *pins)
 
   /*
     XXX this will deadlock if other threads will wait for
-    the caller to do something after lf_pinbox_put_pins(),
+    the caller to do something after _lf_pinbox_put_pins(),
     and they would have pinned addresses that the caller wants to free.
     Thus: only free pins when all work is done and nobody can wait for you!!!
   */
   while (pins->purgatory_count)
   {
-    lf_pinbox_real_free(pins);
+    _lf_pinbox_real_free(pins);
     if (pins->purgatory_count)
+    {
+      my_atomic_rwlock_wrunlock(&pins->pinbox->pinarray.lock);
       pthread_yield();
+      my_atomic_rwlock_wrlock(&pins->pinbox->pinarray.lock);
+    }
   }
   top_ver= pinbox->pinstack_top_ver;
   do
@@ -267,14 +271,14 @@ static int ptr_cmp(void **a, void **b)
   Free an object allocated via pinbox allocator
 
   DESCRIPTION
-    add an object to purgatory. if necessary, calllf_pinbox_real_free()
+    add an object to purgatory. if necessary, call _lf_pinbox_real_free()
     to actually free something.
 */
-void lf_pinbox_free(LF_PINS *pins, void *addr)
+void _lf_pinbox_free(LF_PINS *pins, void *addr)
 {
   add_to_purgatory(pins, addr);
   if (pins->purgatory_count % LF_PURGATORY_SIZE == 0)
-   lf_pinbox_real_free(pins);
+    _lf_pinbox_real_free(pins);
 }
 
 struct st_harvester {
@@ -283,7 +287,7 @@ struct st_harvester {
 };
 
 /*
-  callback forlf_dynarray_iterate:
+  callback for _lf_dynarray_iterate:
   scan all pins of all threads and accumulate all pins
 */
 static int harvest_pins(LF_PINS *el, struct st_harvester *hv)
@@ -310,7 +314,7 @@ static int harvest_pins(LF_PINS *el, struct st_harvester *hv)
 }
 
 /*
-  callback forlf_dynarray_iterate:
+  callback for _lf_dynarray_iterate:
   scan all pins of all threads and see if addr is present there
 */
 static int match_pins(LF_PINS *el, void *addr)
@@ -324,19 +328,13 @@ static int match_pins(LF_PINS *el, void *addr)
   return 0;
 }
 
-#if STACK_DIRECTION < 0
-#define available_stack_size(CUR,END) (long) ((char*)(CUR) - (char*)(END))
-#else
-#define available_stack_size(CUR,END) (long) ((char*)(END) - (char*)(CUR))
-#endif
-
 #define next_node(P, X) (*((uchar * volatile *)(((uchar *)(X)) + (P)->free_ptr_offset)))
 #define anext_node(X) next_node(&allocator->pinbox, (X))
 
 /*
   Scan the purgatory and free everything that can be freed
 */
-static void lf_pinbox_real_free(LF_PINS *pins)
+static void _lf_pinbox_real_free(LF_PINS *pins)
 {
   int npins;
   void *list;
@@ -359,7 +357,7 @@ static void lf_pinbox_real_free(LF_PINS *pins)
       hv.granary= addr;
       hv.npins= npins;
       /* scan the dynarray and accumulate all pinned addresses */
-     lf_dynarray_iterate(&pinbox->pinarray,
+      _lf_dynarray_iterate(&pinbox->pinarray,
                            (lf_dynarray_func)harvest_pins, &hv);
 
       npins= hv.granary-addr;
@@ -394,7 +392,7 @@ static void lf_pinbox_real_free(LF_PINS *pins)
       }
       else /* no alloca - no cookie. linear search here */
       {
-        if (lf_dynarray_iterate(&pinbox->pinarray,
+        if (_lf_dynarray_iterate(&pinbox->pinarray,
                                  (lf_dynarray_func)match_pins, cur))
           goto found;
       }
@@ -416,7 +414,7 @@ found:
 /* lock-free memory allocator for fixed-size objects */
 
 /*
-  callback forlf_pinbox_real_free to free a list of unpinned objects -
+  callback for _lf_pinbox_real_free to free a list of unpinned objects -
   add it back to the allocator stack
 
   DESCRIPTION
@@ -443,7 +441,7 @@ static void alloc_free(uchar *first,
 /*
   initialize lock-free allocator
 
-  SYNOPSIS
+  SYNOPSYS
     allocator           -
     size                a size of an object to allocate
     free_ptr_offset     an offset inside the object to a sizeof(void *)
@@ -498,7 +496,7 @@ void lf_alloc_destroy(LF_ALLOCATOR *allocator)
     Pop an unused object from the stack or malloc it is the stack is empty.
     pin[0] is used, it's removed on return.
 */
-void *lf_alloc_new(LF_PINS *pins)
+void *_lf_alloc_new(LF_PINS *pins)
 {
   LF_ALLOCATOR *allocator= (LF_ALLOCATOR *)(pins->pinbox->free_func_arg);
   uchar *node;
@@ -507,7 +505,7 @@ void *lf_alloc_new(LF_PINS *pins)
     do
     {
       node= allocator->top;
-     lf_pin(pins, 0, node);
+      _lf_pin(pins, 0, node);
     } while (node != allocator->top && LF_BACKOFF);
     if (!node)
     {
@@ -524,7 +522,7 @@ void *lf_alloc_new(LF_PINS *pins)
                          (void *)&node, anext_node(node)))
       break;
   }
- lf_unpin(pins, 0);
+  _lf_unpin(pins, 0);
   return node;
 }
 

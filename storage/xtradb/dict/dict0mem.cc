@@ -287,7 +287,7 @@ dict_mem_table_add_col(
 		if (UNIV_UNLIKELY(table->n_def == table->n_cols)) {
 			heap = table->heap;
 		}
-		if (UNIV_LIKELY(i != 0) && UNIV_UNLIKELY(table->col_names == NULL)) {
+		if (UNIV_LIKELY(i) && UNIV_UNLIKELY(!table->col_names)) {
 			/* All preceding column names are empty. */
 			char* s = static_cast<char*>(
 				mem_heap_zalloc(heap, table->n_def));
@@ -321,8 +321,8 @@ dict_mem_table_col_rename_low(
 	ut_ad(from_len <= NAME_LEN);
 	ut_ad(to_len <= NAME_LEN);
 
-	char from[NAME_LEN];
-	strncpy(from, s, NAME_LEN);
+	char from[NAME_LEN + 1];
+	strncpy(from, s, NAME_LEN + 1);
 
 	if (from_len == to_len) {
 		/* The easy case: simply replace the column name in

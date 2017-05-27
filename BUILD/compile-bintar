@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA.
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 
 # This script's purpose is to build the binary tarball packages for MariaDB
@@ -73,7 +73,7 @@ CC="gcc -static-libgcc" CXX="g++ -static-libgcc" CFLAGS="$FLAGS" CXXFLAGS="$FLAG
 	--without-docs --with-extra-charsets=all \
 	--with-libwrap --with-ssl --with-readline --with-libevent --with-zlib-dir=bundled \
 	--with-partition --with-embedded-server \
-	--with-plugins=max \
+	--with-plugins=max-no-ndb \
 	--without-plugin-innodb_plugin
 
 make $AM_MAKEFLAGS

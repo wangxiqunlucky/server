@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "maria_def.h"
 #include "trnman.h"
@@ -419,8 +419,15 @@ static ulonglong flush_start= 0;
 #include <my_atomic.h>
 /* an array that maps id of a MARIA_SHARE to this MARIA_SHARE */
 static MARIA_SHARE **id_to_share= NULL;
+/* lock for id_to_share */
+static my_atomic_rwlock_t LOCK_id_to_share;
 
-static my_bool translog_page_validator(int res, PAGECACHE_IO_HOOK_ARGS *args);
+static my_bool translog_dummy_callback(uchar *page,
+                                       pgcache_page_no_t page_no,
+                                       uchar* data_ptr);
+static my_bool translog_page_validator(uchar *page,
+                                       pgcache_page_no_t page_no,
+                                       uchar* data_ptr);
 
 static my_bool translog_get_next_chunk(TRANSLOG_SCANNER_DATA *scanner);
 static uint32 translog_first_file(TRANSLOG_ADDRESS horizon, int is_protected);
@@ -946,6 +953,7 @@ static File create_logfile_by_number_no_cache(uint32 file_no)
   {
     DBUG_PRINT("error", ("Error %d during syncing directory '%s'",
                          errno, log_descriptor.directory));
+    mysql_file_close(file, MYF(0));
     translog_stop_writing();
     DBUG_RETURN(-1);
   }
@@ -1447,17 +1455,16 @@ LSN translog_get_file_max_lsn_stored(uint32 file)
     if (translog_read_file_header(&info, fd))
     {
       DBUG_PRINT("error", ("Can't read file header"));
-      DBUG_RETURN(LSN_ERROR);
+      info.max_lsn= LSN_ERROR;
     }
 
     if (mysql_file_close(fd, MYF(MY_WME)))
     {
       DBUG_PRINT("error", ("Can't close file"));
-      DBUG_RETURN(LSN_ERROR);
+      info.max_lsn= LSN_ERROR;
     }
 
-    DBUG_PRINT("info", ("Max lsn: (%lu,0x%lx)",
-                         LSN_IN_PARTS(info.max_lsn)));
+    DBUG_PRINT("info", ("Max lsn: (%lu,0x%lx)", LSN_IN_PARTS(info.max_lsn)));
     DBUG_RETURN(info.max_lsn);
   }
 }
@@ -1560,6 +1567,17 @@ static my_bool translog_close_log_file(TRANSLOG_FILE *file)
 
 
 /**
+  @brief Dummy function for write failure (the log to not use
+  pagecache writing)
+*/
+
+void translog_dummy_write_failure(uchar *data __attribute__((unused)))
+{
+  return;
+}
+
+
+/**
   @brief Initializes TRANSLOG_FILE structure
 
   @param file            reference on the file to initialize
@@ -1570,11 +1588,10 @@ static my_bool translog_close_log_file(TRANSLOG_FILE *file)
 static void translog_file_init(TRANSLOG_FILE *file, uint32 number,
                                my_bool is_sync)
 {
-  pagecache_file_set_null_hooks(&file->handler);
-  file->handler.post_read_hook= translog_page_validator;
-  file->handler.flush_log_callback= maria_flush_log_for_page_none;
-  file->handler.callback_data= (uchar*)file;
-
+  pagecache_file_init(file->handler, &translog_page_validator,
+                      &translog_dummy_callback,
+                      &translog_dummy_write_failure,
+                      maria_flush_log_for_page_none, file);
   file->number= number;
   file->was_recovered= 0;
   file->is_sync= is_sync;
@@ -1621,13 +1638,15 @@ static my_bool translog_create_new_file()
   if (allocate_dynamic(&log_descriptor.open_files,
                        log_descriptor.max_file - log_descriptor.min_file + 2))
     goto error_lock;
-  if ((file->handler.file=
-       create_logfile_by_number_no_cache(file_no)) == -1)
+
+  /* this call just expand the array */
+  if (insert_dynamic(&log_descriptor.open_files, (uchar*)&file))
+    goto error_lock;
+
+  if ((file->handler.file= create_logfile_by_number_no_cache(file_no)) == -1)
     goto error_lock;
   translog_file_init(file, file_no, 0);
 
-  /* this call just expand the array */
-  insert_dynamic(&log_descriptor.open_files, (uchar*)&file);
   log_descriptor.max_file++;
   {
     char *start= (char*) dynamic_element(&log_descriptor.open_files, 0,
@@ -1661,6 +1680,7 @@ error_lock:
   mysql_rwlock_unlock(&log_descriptor.open_files_lock);
 error:
   translog_stop_writing();
+  my_free(file);
   DBUG_RETURN(1);
 }
 
@@ -2771,6 +2791,19 @@ static my_bool translog_recover_page_up_to_sector(uchar *page, uint16 offset)
 
 
 /**
+  @brief Dummy write callback.
+*/
+
+static my_bool
+translog_dummy_callback(uchar *page __attribute__((unused)),
+                        pgcache_page_no_t page_no __attribute__((unused)),
+                        uchar* data_ptr __attribute__((unused)))
+{
+  return 0;
+}
+
+
+/**
   @brief Checks and removes sector protection.
 
   @param page            reference on the page content.
@@ -2846,25 +2879,20 @@ translog_check_sector_protection(uchar *page, TRANSLOG_FILE *file)
   @retval 1 Error
 */
 
-static my_bool translog_page_validator(int res, PAGECACHE_IO_HOOK_ARGS *args)
+static my_bool translog_page_validator(uchar *page,
+                                       pgcache_page_no_t page_no,
+                                       uchar* data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
   uint this_page_page_overhead;
   uint flags;
   uchar *page_pos;
-  TRANSLOG_FILE *data= (TRANSLOG_FILE *) args->data;
+  TRANSLOG_FILE *data= (TRANSLOG_FILE *) data_ptr;
 #ifndef DBUG_OFF
   pgcache_page_no_t offset= page_no * TRANSLOG_PAGE_SIZE;
 #endif
   DBUG_ENTER("translog_page_validator");
 
   data->was_recovered= 0;
-
-  if (res)
-  {
-    DBUG_RETURN(1);
-  }
 
   if ((pgcache_page_no_t) uint3korr(page) != page_no ||
       (uint32) uint3korr(page + 3) != data->number)
@@ -3130,11 +3158,9 @@ restart:
               This IF should be true because we use in-memory data which
               supposed to be correct.
             */
-            PAGECACHE_IO_HOOK_ARGS args;
-            args.page= buffer;
-            args.pageno= LSN_OFFSET(addr) / TRANSLOG_PAGE_SIZE;
-            args.data= (uchar*) &file_copy;
-            if (translog_page_validator(0, &args))
+            if (translog_page_validator(buffer,
+                                        LSN_OFFSET(addr) / TRANSLOG_PAGE_SIZE,
+                                        (uchar*) &file_copy))
             {
               DBUG_ASSERT(0);
               buffer= NULL;
@@ -3962,11 +3988,14 @@ my_bool translog_init_with_table(const char *directory,
     /* Start new log system from scratch */
     log_descriptor.horizon= MAKE_LSN(start_file_num,
                                      TRANSLOG_PAGE_SIZE); /* header page */
-    if ((file->handler.file=
-         create_logfile_by_number_no_cache(start_file_num)) == -1)
-      goto err;
     translog_file_init(file, start_file_num, 0);
     if (insert_dynamic(&log_descriptor.open_files, (uchar*)&file))
+    {
+      my_free(file);
+      goto err;
+    }
+    if ((file->handler.file=
+         create_logfile_by_number_no_cache(start_file_num)) == -1)
       goto err;
     log_descriptor.min_file= log_descriptor.max_file= start_file_num;
     if (translog_write_file_header())
@@ -4019,6 +4048,7 @@ my_bool translog_init_with_table(const char *directory,
     Log records will refer to a MARIA_SHARE by a unique 2-byte id; set up
     structures for generating 2-byte ids:
   */
+  my_atomic_rwlock_init(&LOCK_id_to_share);
   id_to_share= (MARIA_SHARE **) my_malloc(SHARE_ID_MAX * sizeof(MARIA_SHARE*),
                                           MYF(MY_WME | MY_ZEROFILL));
   if (unlikely(!id_to_share))
@@ -4262,6 +4292,7 @@ void translog_destroy()
 
   if (log_descriptor.directory_fd >= 0)
     mysql_file_close(log_descriptor.directory_fd, MYF(MY_WME));
+  my_atomic_rwlock_destroy(&LOCK_id_to_share);
   if (id_to_share != NULL)
     my_free(id_to_share + 1);
   DBUG_VOID_RETURN;
@@ -7789,8 +7820,24 @@ void translog_flush_buffers(TRANSLOG_ADDRESS *lsn,
     translog_force_current_buffer_to_finish();
     translog_buffer_unlock(buffer);
   }
-  else if (log_descriptor.bc.buffer->prev_last_lsn != LSN_IMPOSSIBLE)
+  else
   {
+    if (log_descriptor.bc.buffer->last_lsn == LSN_IMPOSSIBLE)
+    {
+      /*
+        In this case both last_lsn & prev_last_lsn are LSN_IMPOSSIBLE
+        otherwise it will go in the first IF because LSN_IMPOSSIBLE less
+        then any real LSN and cmp_translog_addr(*lsn,
+        log_descriptor.bc.buffer->prev_last_lsn) will be TRUE
+      */
+      DBUG_ASSERT(log_descriptor.bc.buffer->prev_last_lsn ==
+                  LSN_IMPOSSIBLE);
+      DBUG_PRINT("info", ("There is no LSNs yet generated => do nothing"));
+      translog_unlock();
+      DBUG_VOID_RETURN;
+    }
+
+    DBUG_ASSERT(log_descriptor.bc.buffer->prev_last_lsn != LSN_IMPOSSIBLE);
     /* fix lsn if it was horizon */
     *lsn= log_descriptor.bc.buffer->prev_last_lsn;
     DBUG_PRINT("info", ("LSN to flush fixed to prev last lsn: (%lu,0x%lx)",
@@ -7799,13 +7846,6 @@ void translog_flush_buffers(TRANSLOG_ADDRESS *lsn,
                      TRANSLOG_BUFFERS_NO);
     translog_unlock();
   }
-  else if (log_descriptor.bc.buffer->last_lsn == LSN_IMPOSSIBLE)
-  {
-    DBUG_PRINT("info", ("There is no LSNs yet generated => do nothing"));
-    translog_unlock();
-    DBUG_VOID_RETURN;
-  }
-
   /* flush buffers */
   *sent_to_disk= translog_get_sent_to_disk();
   if (cmp_translog_addr(*lsn, *sent_to_disk) > 0)
@@ -8100,6 +8140,7 @@ int translog_assign_id_to_share(MARIA_HA *tbl_info, TRN *trn)
     id= 0;
     do
     {
+      my_atomic_rwlock_wrlock(&LOCK_id_to_share);
       for ( ; i <= SHARE_ID_MAX ; i++) /* the range is [1..SHARE_ID_MAX] */
       {
         void *tmp= NULL;
@@ -8110,6 +8151,7 @@ int translog_assign_id_to_share(MARIA_HA *tbl_info, TRN *trn)
           break;
         }
       }
+      my_atomic_rwlock_wrunlock(&LOCK_id_to_share);
       i= 1; /* scan the whole array */
     } while (id == 0);
     DBUG_PRINT("info", ("id_to_share: 0x%lx -> %u", (ulong)share, id));
@@ -8172,7 +8214,9 @@ void translog_deassign_id_from_share(MARIA_SHARE *share)
     mutex:
   */
   mysql_mutex_assert_owner(&share->intern_lock);
+  my_atomic_rwlock_rdlock(&LOCK_id_to_share);
   my_atomic_storeptr((void **)&id_to_share[share->id], 0);
+  my_atomic_rwlock_rdunlock(&LOCK_id_to_share);
   share->id= 0;
   /* useless but safety: */
   share->lsn_of_file_id= LSN_IMPOSSIBLE;
@@ -8632,8 +8676,8 @@ void translog_set_file_size(uint32 size)
   DBUG_ENTER("translog_set_file_size");
   translog_lock();
   DBUG_PRINT("enter", ("Size: %lu", (ulong) size));
-  DBUG_ASSERT(size % TRANSLOG_PAGE_SIZE == 0);
-  DBUG_ASSERT(size >= TRANSLOG_MIN_FILE_SIZE);
+  DBUG_ASSERT(size % TRANSLOG_PAGE_SIZE == 0 &&
+              size >= TRANSLOG_MIN_FILE_SIZE);
   log_descriptor.log_file_max_size= size;
   /* if current file longer then finish it*/
   if (LSN_OFFSET(log_descriptor.horizon) >=  log_descriptor.log_file_max_size)
@@ -9083,8 +9127,8 @@ static void dump_datapage(uchar *buffer, File handler)
       }
     }
     tfile.number= file;
-    bzero(&tfile.handler, sizeof(tfile.handler));
     tfile.handler.file= handler;
+    pagecache_file_init(tfile.handler, NULL, NULL, NULL, NULL, NULL);
     tfile.was_recovered= 0;
     tfile.is_sync= 1;
     if (translog_check_sector_protection(buffer, &tfile))

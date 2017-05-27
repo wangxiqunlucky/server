@@ -117,7 +117,7 @@ static int get_errno_from_oserr(unsigned long oserrno)
     return EINVAL;
 }
 
-/* Set errno corresponding to GetLastError() value */
+/* Set errno corresponsing to GetLastError() value */
 void my_osmaperr ( unsigned long oserrno)
 {
     errno= get_errno_from_oserr(oserrno);

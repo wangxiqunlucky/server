@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "ma_fulltext.h"
 #include "trnman_public.h"
@@ -78,11 +78,11 @@ int maria_delete_table(const char *name)
       DBUG_RETURN(1);
   }
 
-  DBUG_RETURN(maria_delete_table_files(name, 0, sync_dir));
+  DBUG_RETURN(maria_delete_table_files(name, sync_dir));
 }
 
 
-int maria_delete_table_files(const char *name, my_bool temporary, myf sync_dir)
+int maria_delete_table_files(const char *name, myf sync_dir)
 {
   DBUG_ENTER("maria_delete_table_files");
 
@@ -90,10 +90,7 @@ int maria_delete_table_files(const char *name, my_bool temporary, myf sync_dir)
       mysql_file_delete_with_symlink(key_file_dfile, name, MARIA_NAME_DEXT, MYF(MY_WME | sync_dir)))
     DBUG_RETURN(my_errno);
 
-  if (!temporary)
-  {
-    mysql_file_delete_with_symlink(key_file_dfile, name, ".TMD", MYF(0));
-    mysql_file_delete_with_symlink(key_file_dfile, name, ".OLD", MYF(0));
-  }
+  mysql_file_delete_with_symlink(key_file_dfile, name, ".TMD", MYF(0));
+  mysql_file_delete_with_symlink(key_file_dfile, name, ".OLD", MYF(0));
   DBUG_RETURN(0);
 }

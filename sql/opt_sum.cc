@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2011, Oracle and/or its affiliates.
-   Copyright (c) 2008-2011 Monty Program Ab
+   Copyright (c) 2008, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -254,6 +254,8 @@ int opt_sum_query(THD *thd,
   int error= 0;
   DBUG_ENTER("opt_sum_query");
 
+  thd->lex->current_select->min_max_opt_list.empty();
+
   if (conds)
     where_tables= conds->used_tables();
 
@@ -447,7 +449,14 @@ int opt_sum_query(THD *thd,
           item_sum->aggregator_clear();
         }
         else
+        {
           item_sum->reset_and_add();
+          /*
+            Save a reference to the item for possible rollback
+            of the min/max optimizations for this select
+          */
+	  thd->lex->current_select->min_max_opt_list.push_back(item_sum);
+        }
         item_sum->make_const();
         recalc_const_item= 1;
         break;
@@ -580,7 +589,7 @@ bool simple_pred(Item_func *func_item, Item **args, bool *inv_order)
         if (!item->const_item())
           return 0;
         args[i]= item;
-        if (check_item1_shorter_item2(args[0], args[i]))
+        if (check_item1_shorter_item2(args[0], args[1]))
           return 0;
       }
     }
@@ -656,13 +665,12 @@ static bool matching_cond(bool max_fl, TABLE_REF *ref, KEY *keyinfo,
   if (!cond)
     DBUG_RETURN(TRUE);
   Field *field= field_part->field;
-  table_map cond_used_tables= cond->used_tables();
-  if (cond_used_tables & OUTER_REF_TABLE_BIT)
+  if (cond->used_tables() & OUTER_REF_TABLE_BIT)
   { 
     DBUG_RETURN(FALSE);
   } 
-  if (!(cond_used_tables & field->table->map) &&
-      MY_TEST(cond_used_tables & ~PSEUDO_TABLE_BITS))
+  if (!(cond->used_tables() & field->table->map) &&
+      MY_TEST(cond->used_tables() & ~PSEUDO_TABLE_BITS))
   {
     /* Condition doesn't restrict the used table */
     DBUG_RETURN(!cond->const_item());
@@ -1042,6 +1050,7 @@ static int maxmin_in_range(bool max_fl, Field* field, COND *cond)
   case Item_func::LT_FUNC:
   case Item_func::LE_FUNC:
     less_fl= 1;
+    /* fall through */
   case Item_func::GT_FUNC:
   case Item_func::GE_FUNC:
   {

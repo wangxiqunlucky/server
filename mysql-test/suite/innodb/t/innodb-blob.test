@@ -3,13 +3,16 @@
 # columns are stored off-page.
 
 --source include/have_innodb.inc
---source include/have_innodb_16k.inc
 
 # DEBUG_SYNC must be compiled in.
 --source include/have_debug_sync.inc
 
-# Embedded server does not support restarting
+# Valgrind would complain about memory leaks when we crash on purpose.
+--source include/not_valgrind.inc
+# Embedded server does not support crashing
 --source include/not_embedded.inc
+# Avoid CrashReporter popup on Mac
+--source include/not_crashrep.inc
 
 CREATE TABLE t1 (a INT PRIMARY KEY, b TEXT) ENGINE=InnoDB;
 CREATE TABLE t2 (a INT PRIMARY KEY) ENGINE=InnoDB;
@@ -64,10 +67,10 @@ SELECT a, RIGHT(b,20) FROM t1;
 SELECT a FROM t1;
 
 # Request a crash, and restart the server.
-BEGIN;
+SET DEBUG_DBUG='+d,crash_commit_before';
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
 INSERT INTO t2 VALUES (42);
-
---source include/kill_and_restart_mysqld.inc
 
 disconnect con1;
 disconnect con2;
@@ -76,6 +79,7 @@ connection default;
 --error 2013
 reap;
 
+# Write file to make mysql-test-run.pl restart the server
 --enable_reconnect
 --source include/wait_until_connected_again.inc
 --disable_reconnect
@@ -142,7 +146,11 @@ SET DEBUG_SYNC='now WAIT_FOR have_latch';
 SELECT info FROM information_schema.processlist
 WHERE state = 'debug sync point: before_row_upd_extern';
 
---source include/kill_and_restart_mysqld.inc
+# Request a crash, and restart the server.
+SET DEBUG_DBUG='+d,crash_commit_before';
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
+COMMIT;
 
 disconnect con2;
 connection default;
@@ -150,6 +158,7 @@ connection default;
 --error 2013
 reap;
 
+# Write file to make mysql-test-run.pl restart the server
 --enable_reconnect
 --source include/wait_until_connected_again.inc
 --disable_reconnect
@@ -181,7 +190,11 @@ SET DEBUG_SYNC='now WAIT_FOR have_latch';
 SELECT info FROM information_schema.processlist
 WHERE state = 'debug sync point: after_row_upd_extern';
 
---source include/kill_and_restart_mysqld.inc
+# Request a crash, and restart the server.
+SET DEBUG_DBUG='+d,crash_commit_before';
+--exec echo "restart" > $MYSQLTEST_VARDIR/tmp/mysqld.1.expect
+--error 2013
+COMMIT;
 
 disconnect con2;
 connection default;
@@ -189,9 +202,11 @@ connection default;
 --error 2013
 reap;
 
+# Write file to make mysql-test-run.pl restart the server
 --enable_reconnect
 --source include/wait_until_connected_again.inc
 --disable_reconnect
+
 CHECK TABLE t1,t2,t3;
 SELECT a, RIGHT(b,20), RIGHT(c,20) FROM t3;
 SELECT a FROM t3;

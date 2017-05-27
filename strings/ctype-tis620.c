@@ -40,6 +40,7 @@
 
 #ifdef HAVE_CHARSET_tis620
 
+#define BUFFER_MULTIPLY 4
 #define M  L_MIDDLE
 #define U  L_UPPER
 #define L  L_LOWER
@@ -617,7 +618,7 @@ ret:
 */
 
 static size_t
-my_strnxfrm_tis620(CHARSET_INFO *cs,
+my_strnxfrm_tis620(const CHARSET_INFO *cs,
                    uchar *dst, size_t dstlen, uint nweights,
                    const uchar *src, size_t srclen, uint flags)
 {
@@ -884,11 +885,7 @@ static MY_CHARSET_HANDLER my_charset_handler=
     my_strntod_8bit,
     my_strtoll10_8bit,
     my_strntoull10rnd_8bit,
-    my_scan_8bit,
-    my_charlen_8bit,
-    my_well_formed_char_length_8bit,
-    my_copy_8bit,
-    my_wc_mb_bin, /* native_to_mb */
+    my_scan_8bit
 };
 
 
@@ -896,7 +893,7 @@ static MY_CHARSET_HANDLER my_charset_handler=
 struct charset_info_st my_charset_tis620_thai_ci=
 {
     18,0,0,		/* number    */
-    MY_CS_COMPILED|MY_CS_PRIMARY|MY_CS_STRNXFRM|MY_CS_NON1TO1, /* state     */
+    MY_CS_COMPILED|MY_CS_PRIMARY|MY_CS_STRNXFRM,	/* state     */
     "tis620",		/* cs name    */
     "tis620_thai_ci",	/* name      */
     "",			/* comment   */

@@ -13,21 +13,20 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* This file should be included when using maria functions */
 
 #ifndef _maria_h
 #define _maria_h
+#ifdef	__cplusplus
+extern "C" {
+#endif
 #include <my_base.h>
 #include <m_ctype.h>
 #include "my_compare.h"
 #include "ft_global.h"
 #include <myisamchk.h>
-
-#ifdef	__cplusplus
-extern "C" {
-#endif
 
 #define MARIA_CANNOT_ROLLBACK
 
@@ -149,7 +148,7 @@ typedef struct st_maria_create_info
   uint null_bytes;
   uint old_options;
   enum data_file_type org_data_file_type;
-  uint16 language;
+  uint8 language;
   my_bool with_auto_increment, transactional;
 } MARIA_CREATE_INFO;
 
@@ -268,8 +267,6 @@ extern my_bool maria_delay_key_write;
 extern my_off_t maria_max_temp_length;
 extern ulong maria_bulk_insert_tree_size, maria_data_pointer_size;
 extern MY_TMPDIR *maria_tmpdir;
-extern my_bool maria_encrypt_tables;
-
 /*
   This is used to check if a symlink points into the mysql data home,
   which is normally forbidden as it can be used to get access to

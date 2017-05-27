@@ -86,7 +86,7 @@ void XTAB::Printf(PGLOBAL g, FILE *f, uint n)
     PlugPutOut(g, f, TYPE_TDB, tp->To_Tdb, n + 2);
     } /* endfor tp */
 
-  } /* end of Printf */
+  } /* end of Print */
 
 /***********************************************************************/
 /*  Make string output of XTAB contents.                               */
@@ -105,7 +105,7 @@ void XTAB::Prints(PGLOBAL, char *ps, uint z)
     n -= i;
     } // endif tp
 
-  } /* end of Prints */
+  } /* end of Print */
 
 
 /***********************************************************************/
@@ -149,7 +149,7 @@ void COLUMN::Printf(PGLOBAL g, FILE *f, uint n)
 
   PlugPutOut(g, f, TYPE_TABLE, To_Table, n + 2);
   PlugPutOut(g, f, TYPE_XOBJECT, To_Col, n + 2);
-  } /* end of Printf */
+  } /* end of Print */
 
 /***********************************************************************/
 /*  Make string output of COLUMN contents.                             */
@@ -166,4 +166,4 @@ void COLUMN::Prints(PGLOBAL, char *ps, uint z)
 
   strncpy(ps, buf, z);
   ps[z - 1] = '\0';
-  } /* end of Prints */
+  } /* end of Print */

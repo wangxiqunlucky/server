@@ -33,7 +33,7 @@ static my_bool is_nt()
 }
 
 /*
-  Auxiliary structure to store pointers to the data which we need to keep
+  Auxilary structure to store pointers to the data which we need to keep
   around while SECURITY_ATTRIBUTES is in use.
 */
 

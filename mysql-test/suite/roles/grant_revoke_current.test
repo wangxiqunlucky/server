@@ -20,10 +20,5 @@ show grants for current_role;
 revoke all, grant option from current_role;
 show grants for current_role;
 
-set password=password('foobar');
-show grants;
-grant r1 to current_user() identified by 'barfoo';
-show grants;
-set password='';
-
 drop role r1;
+

@@ -1,7 +1,6 @@
 /*****************************************************************************
 
 Copyright (c) 2011-2012 Percona Inc. All Rights Reserved.
-Copyright (C) 2016, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -282,7 +281,7 @@ log_online_read_bitmap_page(
 	ut_a(bitmap_file->offset % MODIFIED_PAGE_BLOCK_SIZE == 0);
 
 	success = os_file_read(bitmap_file->file, page, bitmap_file->offset,
-		               MODIFIED_PAGE_BLOCK_SIZE);
+			       MODIFIED_PAGE_BLOCK_SIZE);
 
 	if (UNIV_UNLIKELY(!success)) {
 
@@ -329,7 +328,7 @@ log_online_read_last_tracked_lsn(void)
 	lsn_t		result;
 	os_offset_t	read_offset	= log_bmp_sys->out.offset;
 
-	while (!checksum_ok && read_offset > 0 && !is_last_page)
+	while ((!checksum_ok || !is_last_page) && read_offset > 0)
 	{
 		read_offset -= MODIFIED_PAGE_BLOCK_SIZE;
 		log_bmp_sys->out.offset = read_offset;
@@ -404,11 +403,12 @@ log_online_can_track_missing(
 	last_tracked_lsn = ut_max(last_tracked_lsn, MIN_TRACKED_LSN);
 
 	if (last_tracked_lsn > tracking_start_lsn) {
-		ib_logf(IB_LOG_LEVEL_FATAL,
+		ib_logf(IB_LOG_LEVEL_ERROR,
 			"last tracked LSN " LSN_PF " is ahead of tracking "
 			"start LSN " LSN_PF ".  This can be caused by "
 			"mismatched bitmap files.",
 			last_tracked_lsn, tracking_start_lsn);
+		exit(1);
 	}
 
 	return (last_tracked_lsn == tracking_start_lsn)
@@ -448,7 +448,9 @@ log_online_track_missing_on_startup(
 		log_bmp_sys->start_lsn = ut_max(last_tracked_lsn,
 						MIN_TRACKED_LSN);
 		log_set_tracked_lsn(log_bmp_sys->start_lsn);
-		ut_a(log_online_follow_redo_log());
+		if (!log_online_follow_redo_log()) {
+			exit(1);
+		}
 		ut_ad(log_bmp_sys->end_lsn >= tracking_start_lsn);
 
 		ib_logf(IB_LOG_LEVEL_INFO,
@@ -528,7 +530,7 @@ log_online_start_bitmap_file(void)
 							log_bmp_sys->out.name,
 							OS_FILE_CREATE,
 							OS_FILE_READ_WRITE_CACHED,
-							&success, FALSE);
+							&success);
 	}
 	if (UNIV_UNLIKELY(!success)) {
 
@@ -554,9 +556,9 @@ log_online_rotate_bitmap_file(
 	lsn_t	next_file_start_lsn)	/*!<in: the start LSN name
 					part */
 {
-	if (log_bmp_sys->out.file != os_file_invalid) {
+	if (!os_file_is_invalid(log_bmp_sys->out.file)) {
 		os_file_close(log_bmp_sys->out.file);
-		log_bmp_sys->out.file = os_file_invalid;
+		os_file_mark_invalid(&log_bmp_sys->out.file);
 	}
 	log_bmp_sys->out_seq_num++;
 	log_online_make_bitmap_name(next_file_start_lsn);
@@ -677,8 +679,9 @@ log_online_read_init(void)
 
 	if (os_file_closedir(bitmap_dir)) {
 		os_file_get_last_error(TRUE);
-		ib_logf(IB_LOG_LEVEL_FATAL, "cannot close \'%s\'",
+		ib_logf(IB_LOG_LEVEL_ERROR, "cannot close \'%s\'",
 			log_bmp_sys->bmp_file_home);
+		exit(1);
 	}
 
 	if (!log_bmp_sys->out_seq_num) {
@@ -693,12 +696,14 @@ log_online_read_init(void)
 	log_bmp_sys->out.file
 		= os_file_create_simple_no_error_handling
 		(innodb_file_bmp_key, log_bmp_sys->out.name, OS_FILE_OPEN,
-		 OS_FILE_READ_WRITE_CACHED, &success, FALSE);
+		 OS_FILE_READ_WRITE_CACHED, &success);
 
 	if (!success) {
 
 		/* New file, tracking from scratch */
-		ut_a(log_online_start_bitmap_file());
+		if (!log_online_start_bitmap_file()) {
+			exit(1);
+		}
 	}
 	else {
 
@@ -723,7 +728,11 @@ log_online_read_init(void)
 		}
 
 		last_tracked_lsn = log_online_read_last_tracked_lsn();
+		/* Do not rotate if we truncated the file to zero length - we
+		can just start writing there */
+		const bool need_rotate = (last_tracked_lsn != 0);
 		if (!last_tracked_lsn) {
+
 			last_tracked_lsn = last_file_start_lsn;
 		}
 
@@ -735,7 +744,12 @@ log_online_read_init(void)
 		} else {
 			file_start_lsn = tracking_start_lsn;
 		}
-		ut_a(log_online_rotate_bitmap_file(file_start_lsn));
+
+		if (need_rotate
+		    && !log_online_rotate_bitmap_file(file_start_lsn)) {
+
+			exit(1);
+		}
 
 		if (last_tracked_lsn < tracking_start_lsn) {
 
@@ -773,9 +787,9 @@ log_online_read_shutdown(void)
 
 	ib_rbt_node_t *free_list_node = log_bmp_sys->page_free_list;
 
-	if (log_bmp_sys->out.file != os_file_invalid) {
+	if (!os_file_is_invalid(log_bmp_sys->out.file)) {
 		os_file_close(log_bmp_sys->out.file);
-		log_bmp_sys->out.file = os_file_invalid;
+		os_file_mark_invalid(&log_bmp_sys->out.file);
 	}
 
 	rbt_free(log_bmp_sys->modified_pages);
@@ -907,7 +921,7 @@ log_online_is_valid_log_seg(
 	const byte* log_block)	/*!< in: read log data */
 {
 	ibool checksum_is_ok
-		= log_block_checksum_is_ok_or_old_format(log_block, true);
+		= log_block_checksum_is_ok_or_old_format(log_block);
 
 	if (!checksum_is_ok) {
 
@@ -1114,6 +1128,18 @@ log_online_write_bitmap_page(
 				}
 			});
 
+	/* A crash injection site that ensures last checkpoint LSN > last
+	tracked LSN, so that LSN tracking for this interval is tested. */
+	DBUG_EXECUTE_IF("crash_before_bitmap_write",
+			{
+				ulint space_id
+					= mach_read_from_4(block
+						+ MODIFIED_PAGE_SPACE_ID);
+				if (space_id > 0)
+					DBUG_SUICIDE();
+			});
+
+
 	ibool success = os_file_write(log_bmp_sys->out.name,
 				log_bmp_sys->out.file, block,
 				log_bmp_sys->out.offset,
@@ -1137,10 +1163,8 @@ log_online_write_bitmap_page(
 		return FALSE;
 	}
 
-#ifdef UNIV_LINUX
-	posix_fadvise(log_bmp_sys->out.file, log_bmp_sys->out.offset,
-		      MODIFIED_PAGE_BLOCK_SIZE, POSIX_FADV_DONTNEED);
-#endif
+	os_file_advise(log_bmp_sys->out.file, log_bmp_sys->out.offset,
+		       MODIFIED_PAGE_BLOCK_SIZE, OS_FILE_ADVISE_DONTNEED);
 
 	log_bmp_sys->out.offset += MODIFIED_PAGE_BLOCK_SIZE;
 	return TRUE;
@@ -1261,10 +1285,6 @@ log_online_follow_redo_log(void)
 		log_online_follow_log_group(group, contiguous_start_lsn);
 		group = UT_LIST_GET_NEXT(log_groups, group);
 	}
-
-	/* A crash injection site that ensures last checkpoint LSN > last
-	tracked LSN, so that LSN tracking for this interval is tested. */
-	DBUG_EXECUTE_IF("crash_before_bitmap_write", DBUG_SUICIDE(););
 
 	result = log_online_write_bitmap();
 	log_bmp_sys->start_lsn = log_bmp_sys->end_lsn;
@@ -1433,6 +1453,7 @@ log_online_setup_bitmap_file_range(
 		if (UNIV_UNLIKELY(array_pos >= bitmap_files->count)) {
 
 			log_online_diagnose_inconsistent_dir(bitmap_files);
+			os_file_closedir(bitmap_dir);
 			return FALSE;
 		}
 
@@ -1521,7 +1542,7 @@ log_online_open_bitmap_file_read_only(
 							  bitmap_file->name,
 							  OS_FILE_OPEN,
 							  OS_FILE_READ_ONLY,
-			&success, FALSE);
+							  &success);
 	if (UNIV_UNLIKELY(!success)) {
 
 		/* Here and below assume that bitmap file names do not
@@ -1535,10 +1556,8 @@ log_online_open_bitmap_file_read_only(
 	bitmap_file->size = os_file_get_size(bitmap_file->file);
 	bitmap_file->offset = 0;
 
-#ifdef UNIV_LINUX
-	posix_fadvise(bitmap_file->file, 0, 0, POSIX_FADV_SEQUENTIAL);
-	posix_fadvise(bitmap_file->file, 0, 0, POSIX_FADV_NOREUSE);
-#endif
+	os_file_advise(bitmap_file->file, 0, 0, OS_FILE_ADVISE_SEQUENTIAL);
+	os_file_advise(bitmap_file->file, 0, 0, OS_FILE_ADVISE_NOREUSE);
 
 	return TRUE;
 }
@@ -1624,7 +1643,7 @@ log_online_bitmap_iterator_init(
 		/* Empty range */
 		i->in_files.count = 0;
 		i->in_files.files = NULL;
-		i->in.file = os_file_invalid;
+		os_file_mark_invalid(&i->in.file);
 		i->page = NULL;
 		i->failed = FALSE;
 		return TRUE;
@@ -1642,7 +1661,7 @@ log_online_bitmap_iterator_init(
 	if (i->in_files.count == 0) {
 
 		/* Empty range */
-		i->in.file = os_file_invalid;
+		os_file_mark_invalid(&i->in.file);
 		i->page = NULL;
 		i->failed = FALSE;
 		return TRUE;
@@ -1681,10 +1700,10 @@ log_online_bitmap_iterator_release(
 {
 	ut_a(i);
 
-	if (i->in.file != os_file_invalid) {
+	if (!os_file_is_invalid(i->in.file)) {
 
 		os_file_close(i->in.file);
-		i->in.file = os_file_invalid;
+		os_file_mark_invalid(&i->in.file);
 	}
 	if (i->in_files.files) {
 
@@ -1738,8 +1757,9 @@ log_online_bitmap_iterator_next(
 
 			/* Advance file */
 			i->in_i++;
-			success = os_file_close_no_error_handling(i->in.file);
-			i->in.file = os_file_invalid;
+			success = os_file_close_no_error_handling(
+				i->in.file);
+			os_file_mark_invalid(&i->in.file);
 			if (UNIV_UNLIKELY(!success)) {
 
 				os_file_get_last_error(TRUE);
@@ -1848,7 +1868,7 @@ log_online_purge_changed_page_bitmaps(
 		/* If we have to delete the current output file, close it
 		first. */
 		os_file_close(log_bmp_sys->out.file);
-		log_bmp_sys->out.file = os_file_invalid;
+		os_file_mark_invalid(&log_bmp_sys->out.file);
 	}
 
 	for (i = 0; i < bitmap_files.count; i++) {

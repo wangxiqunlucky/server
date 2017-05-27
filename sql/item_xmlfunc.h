@@ -69,19 +69,20 @@ protected:
   };
   Item *nodeset_func;
   XML xml;
-  bool get_xml(XML *xml_arg, bool cache= false)
+  bool get_xml(XML *xml, bool cache= false)
   {
-    if (!cache && xml_arg->cached())
-      return xml_arg->raw() == 0;
-    return xml_arg->parse(args[0], cache);
+    if (!cache && xml->cached())
+      return xml->raw() == 0;
+    return xml->parse(args[0], cache);
   }
 public:
-  Item_xml_str_func(THD *thd, Item *a, Item *b): Item_str_func(thd, a, b)
+  Item_xml_str_func(Item *a, Item *b): 
+    Item_str_func(a,b) 
   {
     maybe_null= TRUE;
   }
-  Item_xml_str_func(THD *thd, Item *a, Item *b, Item *c):
-    Item_str_func(thd, a, b, c)
+  Item_xml_str_func(Item *a, Item *b, Item *c): 
+    Item_str_func(a,b,c) 
   {
     maybe_null= TRUE;
   }
@@ -101,8 +102,7 @@ public:
 class Item_func_xml_extractvalue: public Item_xml_str_func
 {
 public:
-  Item_func_xml_extractvalue(THD *thd, Item *a, Item *b):
-    Item_xml_str_func(thd, a, b) {}
+  Item_func_xml_extractvalue(Item *a,Item *b) :Item_xml_str_func(a,b) {}
   const char *func_name() const { return "extractvalue"; }
   String *val_str(String *);
 };
@@ -115,8 +115,7 @@ class Item_func_xml_update: public Item_xml_str_func
                       const MY_XML_NODE *cut,
                       const String *replace);
 public:
-  Item_func_xml_update(THD *thd, Item *a, Item *b, Item *c):
-    Item_xml_str_func(thd, a, b, c) {}
+  Item_func_xml_update(Item *a,Item *b,Item *c) :Item_xml_str_func(a,b,c) {}
   const char *func_name() const { return "updatexml"; }
   String *val_str(String *);
 };

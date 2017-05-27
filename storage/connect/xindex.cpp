@@ -188,7 +188,7 @@ void XXBASE::Printf(PGLOBAL, FILE *f, uint n)
   memset(m, ' ', n);                    // Make margin string
   m[n] = '\0';
   fprintf(f, "%sXINDEX: Tbxp=%p Num=%d\n", m, Tbxp, Num_K);
-  } // end of Printf
+  } // end of Print
 
 /***********************************************************************/
 /*  Make string output of XINDEX contents.                             */
@@ -197,7 +197,7 @@ void XXBASE::Prints(PGLOBAL, char *ps, uint z)
   {
   *ps = '\0';
   strncat(ps, "Xindex", z);
-  } // end of Prints
+  } // end of Print
 
 /* -------------------------- XINDEX Class --------------------------- */
 
@@ -464,7 +464,7 @@ bool XINDEX::Make(PGLOBAL g, PIXDEF sxp)
         if (ApplyFilter(g, filp))
           break;
 
-        // passthru
+        // fall through
       case RC_NF:
         continue;
       case RC_EF:

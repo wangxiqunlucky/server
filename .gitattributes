@@ -9,7 +9,6 @@
 *.cpp text
 *.h text
 *.test text
-*.java text
 
 # These files should be checked out as is
 *.result -text -whitespace
@@ -24,11 +23,9 @@ pcre/testdata/greppatN4 -text
 *.frm binary
 *.MYD binary
 *.MYI binary
-*.class binary
 
 *.c     diff=cpp
 *.h     diff=cpp
 *.cc    diff=cpp
 *.ic    diff=cpp
 *.cpp   diff=cpp
-*.java  diff=cpp

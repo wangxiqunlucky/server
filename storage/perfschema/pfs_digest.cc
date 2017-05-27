@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2016, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,8 +21,6 @@
 /*
   This code needs extra visibility in the lexer structures
 */
-
-#define MYSQL_LEX 1
 
 #include "my_global.h"
 #include "my_sys.h"
@@ -257,10 +255,11 @@ search:
     if (safe_index == 0)
     {
       /* Record [0] is reserved. */
-      safe_index= 1;
+      continue;
     }
 
     /* Add a new record in digest stat array. */
+    DBUG_ASSERT(safe_index < digest_max);
     pfs= &statements_digest_stat_array[safe_index];
 
     if (pfs->m_lock.is_free())

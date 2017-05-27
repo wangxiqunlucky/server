@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 2011, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2011, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2017, MariaDB Corporation. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
@@ -124,7 +124,11 @@ buf_dump_status(
 		sizeof(export_vars.innodb_buffer_pool_dump_status),
 		fmt, ap);
 
-	ib_logf((ib_log_level_t) severity, "%s", export_vars.innodb_buffer_pool_dump_status);
+	if (severity == STATUS_NOTICE || severity == STATUS_ERR) {
+		ut_print_timestamp(stderr);
+		fprintf(stderr, " InnoDB: %s\n",
+			export_vars.innodb_buffer_pool_dump_status);
+	}
 
 	va_end(ap);
 }
@@ -231,8 +235,6 @@ buf_dump(
 		buf_dump_t*		dump;
 		ulint			n_pages;
 		ulint			j;
-		ulint			limit;
-		ulint			counter;
 
 		buf_pool = buf_pool_from_array(i);
 
@@ -286,9 +288,6 @@ buf_dump(
 
 		buf_pool_mutex_exit(buf_pool);
 
-		limit = (ulint)((double)n_pages * ((double)srv_buf_dump_status_frequency / (double)100));
-		counter = 0;
-
 		for (j = 0; j < n_pages && !SHOULD_QUIT(); j++) {
 			ret = fprintf(f, ULINTPF "," ULINTPF "\n",
 				      BUF_DUMP_SPACE(dump[j]),
@@ -303,14 +302,7 @@ buf_dump(
 				return;
 			}
 
-			counter++;
-
-			/* Print buffer pool dump status only if
-			srv_buf_dump_status_frequency is > 0 and
-			we have processed that amount of pages. */
-			if (srv_buf_dump_status_frequency &&
-			    counter == limit) {
-				counter = 0;
+			if (j % 128 == 0) {
 				buf_dump_status(
 					STATUS_INFO,
 					"Dumping buffer pool "
@@ -683,12 +675,18 @@ again.
 @return this function does not return, it calls os_thread_exit() */
 extern "C" UNIV_INTERN
 os_thread_ret_t
-DECLARE_THREAD(buf_dump_thread)(void*)
+DECLARE_THREAD(buf_dump_thread)(
+/*============================*/
+	void*	arg MY_ATTRIBUTE((unused)))	/*!< in: a dummy parameter
+						required by os_thread_create */
 {
+	my_thread_init();
 	ut_ad(!srv_read_only_mode);
 
-	buf_dump_status(STATUS_INFO, "Dumping buffer pool(s) not yet started");
-	buf_load_status(STATUS_INFO, "Loading buffer pool(s) not yet started");
+	srv_buf_dump_thread_active = TRUE;
+
+	buf_dump_status(STATUS_INFO, "not started");
+	buf_load_status(STATUS_INFO, "not started");
 
 	if (srv_buffer_pool_load_at_startup) {
 		buf_load();
@@ -719,8 +717,9 @@ DECLARE_THREAD(buf_dump_thread)(void*)
 		keep going even if we are in a shutdown state */);
 	}
 
-	srv_buf_dump_thread_active = false;
+	srv_buf_dump_thread_active = FALSE;
 
+	my_thread_end();
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
 	os_thread_exit(NULL);

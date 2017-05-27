@@ -249,10 +249,7 @@ typedef struct st_join_table {
   
   /* Special content for EXPLAIN 'Extra' column or NULL if none */
   enum explain_extra_tag info;
-  
-  Table_access_tracker *tracker;
 
-  Table_access_tracker *jbuf_tracker;
   /* 
     Bitmap of TAB_INFO_* bits that encodes special line for EXPLAIN 'Extra'
     column, or 0 if there is no info.
@@ -361,12 +358,7 @@ typedef struct st_join_table {
   SJ_TMP_TABLE  *check_weed_out_table;
   /* for EXPLAIN only: */
   SJ_TMP_TABLE  *first_weedout_table;
-
-  /**
-    reference to saved plan and execution statistics
-  */
-  Explain_table_access *explain_plan;
-
+  
   /*
     If set, means we should stop join enumeration after we've got the first
     match and return to the specified join tab. May point to
@@ -532,21 +524,6 @@ typedef struct st_join_table {
   bool preread_init();
 
   bool is_sjm_nest() { return MY_TEST(bush_children); }
-  
-  /*
-    If this join_tab reads a non-merged semi-join (also called jtbm), return
-    the select's number.  Otherwise, return 0.
-  */
-  int get_non_merged_semijoin_select() const
-  {
-    Item_in_subselect *subq;
-    if (table->pos_in_table_list && 
-        (subq= table->pos_in_table_list->jtbm_subselect))
-    {
-      return subq->unit->first_select()->select_number;
-    }
-    return 0; /* Not a merged semi-join */
-  }
 
   bool access_from_tables_is_allowed(table_map used_tables,
                                      table_map sjm_lookup_tables)
@@ -558,11 +535,6 @@ typedef struct st_join_table {
   }
 
   void remove_redundant_bnl_scan_conds();
-
-  void save_explain_data(Explain_table_access *eta, table_map prefix_tables, 
-                         bool distinct, struct st_join_table *first_top_tab);
-
-  void update_explain_data(uint idx);
 } JOIN_TAB;
 
 
@@ -766,7 +738,7 @@ public:
   void set_empty()
   {
     sjm_scan_need_tables= 0;
-    LINT_INIT_STRUCT(sjm_scan_last_inner);
+    LINT_INIT(sjm_scan_last_inner);
     is_used= FALSE;
   }
   void set_from_prev(struct st_position *prev);
@@ -789,7 +761,7 @@ public:
   Information about a position of table within a join order. Used in join
   optimization.
 */
-typedef struct st_position
+typedef struct st_position :public Sql_alloc
 {
   /* The table that's put into join order */
   JOIN_TAB *table;
@@ -883,7 +855,6 @@ public:
   JOIN_TAB *end;
 };
 
-class Pushdown_query;
 
 class JOIN :public Sql_alloc
 {
@@ -913,7 +884,6 @@ protected:
     {   
       keyuse.elements= 0;
       keyuse.buffer= NULL;
-      keyuse.malloc_flags= 0;
       best_positions= 0;                        /* To detect errors */
       error= my_multi_malloc(MYF(MY_WME),
                              &best_positions,
@@ -1011,19 +981,7 @@ public:
   */
   uint     top_join_tab_count;
   uint	   send_group_parts;
-  /*
-    This counts how many times do_select() was invoked for this JOIN.
-    It's used to restrict Pushdown_query::execute() only to the first
-    do_select() invocation.
-  */
-  uint     do_select_call_count;
-  /*
-    True if the query has GROUP BY.
-    (that is, if group_by != NULL. when DISTINCT is converted into GROUP BY, it
-     will set this, too. It is not clear why we need a separate var from 
-     group_list)
-  */
-  bool	   group;
+  bool	   group;          /**< If query contains GROUP BY clause */
   bool     need_distinct;
 
   /**
@@ -1057,24 +1015,8 @@ public:
   table_map outer_join;
   /* Bitmap of tables used in the select list items */
   table_map select_list_used_tables;
-  ha_rows  send_records,found_records,join_examined_rows;
-
-  /*
-    LIMIT for the JOIN operation. When not using aggregation or DISITNCT, this 
-    is the same as select's LIMIT clause specifies.
-    Note that this doesn't take sql_calc_found_rows into account.
-  */
-  ha_rows row_limit;
-
-  /*
-    How many output rows should be produced after GROUP BY.
-    (if sql_calc_found_rows is used, LIMIT is ignored)
-  */
-  ha_rows select_limit;
-  /*
-    Number of duplicate rows found in UNION.
-  */
-  ha_rows duplicate_rows;
+  ha_rows  send_records, found_records, examined_rows,
+           row_limit, select_limit, duplicate_rows;
   /**
     Used to fetch no more than given amount of rows per one
     fetch operation of server side cursor.
@@ -1083,16 +1025,10 @@ public:
       - fetch_limit= HA_POS_ERROR if there is no cursor.
       - when we open a cursor, we set fetch_limit to 0,
       - on each fetch iteration we add num_rows to fetch to fetch_limit
-    NOTE: currently always HA_POS_ERROR.
   */
   ha_rows  fetch_limit;
-
   /* Finally picked QEP. This is result of join optimization */
   POSITION *best_positions;
-
-  Pushdown_query *pushdown_query;
-  JOIN_TAB *original_join_tab;
-  uint	   original_table_count;
 
 /******* Join optimization state members start *******/
   /*
@@ -1138,7 +1074,7 @@ public:
     reexecutions. This value is equal to the multiplication of all
     join->positions[i].records_read of a JOIN.
   */
-  double   join_record_count;
+  double   record_count;
   List<Item> *fields;
   List<Cached_item> group_fields, group_fields_cache;
   TABLE    *tmp_table;
@@ -1239,8 +1175,7 @@ public:
   /** Is set if we have a GROUP BY and we have ORDER BY on a constant. */
   bool          skip_sort_order;
 
-  bool need_tmp; 
-  bool hidden_group_fields;
+  bool need_tmp, hidden_group_fields;
   /* TRUE if there was full cleunap of the JOIN */
   bool cleaned;
   DYNAMIC_ARRAY keyuse;
@@ -1294,11 +1229,8 @@ public:
   enum join_optimization_state { NOT_OPTIMIZED=0,
                                  OPTIMIZATION_IN_PROGRESS=1,
                                  OPTIMIZATION_DONE=2};
-  // state of JOIN optimization
-  enum join_optimization_state optimization_state;
+  bool optimized; ///< flag to avoid double optimization in EXPLAIN
   bool initialized; ///< flag to avoid double init_execution calls
-
-  Explain_select *explain;
   
   enum { QEP_NOT_PRESENT_YET, QEP_AVAILABLE, QEP_DELETED} have_query_plan;
 
@@ -1344,7 +1276,6 @@ public:
     table_count= 0;
     top_join_tab_count= 0;
     const_tables= 0;
-    const_table_map= 0;
     eliminated_tables= 0;
     join_list= 0;
     implicit_grouping= FALSE;
@@ -1354,7 +1285,7 @@ public:
     duplicate_rows= send_records= 0;
     found_records= 0;
     fetch_limit= HA_POS_ERROR;
-    join_examined_rows= 0;
+    examined_rows= 0;
     exec_tmp_table1= 0;
     exec_tmp_table2= 0;
     sortorder= 0;
@@ -1383,7 +1314,7 @@ public:
     ref_pointer_array= items0= items1= items2= items3= 0;
     ref_pointer_array_size= 0;
     zero_result_cause= 0;
-    optimization_state= JOIN::NOT_OPTIMIZED;
+    optimized= 0;
     have_query_plan= QEP_NOT_PRESENT_YET;
     initialized= 0;
     cleaned= 0;
@@ -1393,11 +1324,6 @@ public:
     group_optimized_away= 0;
     no_rows_in_result_called= 0;
     positions= best_positions= 0;
-    pushdown_query= 0;
-    original_join_tab= 0;
-    do_select_call_count= 0;
-
-    explain= NULL;
 
     all_fields= fields_arg;
     if (&fields_list != &fields_arg)      /* Avoid valgrind-warning */
@@ -1416,6 +1342,7 @@ public:
     emb_sjm_nest= NULL;
     sjm_lookup_tables= 0;
 
+    exec_saved_explain= false;
     /* 
       The following is needed because JOIN::cleanup(true) may be called for 
       joins for which JOIN::optimize was aborted with an error before a proper
@@ -1423,6 +1350,13 @@ public:
     */
     table_access_tabs= NULL; 
   }
+
+  /*
+    TRUE <=> There was a JOIN::exec() call, which saved this JOIN's EXPLAIN.
+    The idea is that we also save at the end of JOIN::optimize(), but that
+    might not be the final plan.
+  */
+  bool exec_saved_explain;
 
   int prepare(Item ***rref_pointer_array, TABLE_LIST *tables, uint wind_num,
 	      COND *conds, uint og_num, ORDER *order, bool skip_order_by,
@@ -1480,7 +1414,7 @@ public:
             having_value != Item::COND_FALSE);
   }
   bool empty_result() { return (zero_result_cause && !implicit_grouping); }
-  bool change_result(select_result *new_result, select_result *old_result);
+  bool change_result(select_result *result);
   bool is_top_level_join() const
   {
     return (unit == &thd->lex->unit && (unit->fake_select_lex == 0 ||
@@ -1553,8 +1487,6 @@ public:
   int save_explain_data_intern(Explain_query *output, bool need_tmp_table,
                                bool need_order, bool distinct,
                                const char *message);
-  JOIN_TAB *first_breadth_first_optimization_tab() { return table_access_tabs; }
-  JOIN_TAB *first_breadth_first_execution_tab() { return join_tab; }
 private:
   /**
     TRUE if the query contains an aggregate function but has no GROUP
@@ -1568,7 +1500,7 @@ private:
 enum enum_with_bush_roots { WITH_BUSH_ROOTS, WITHOUT_BUSH_ROOTS};
 enum enum_with_const_tables { WITH_CONST_TABLES, WITHOUT_CONST_TABLES};
 
-JOIN_TAB *first_linear_tab(JOIN *join,
+JOIN_TAB *first_linear_tab(JOIN *join, 
                            enum enum_with_bush_roots include_bush_roots,
                            enum enum_with_const_tables const_tbls);
 JOIN_TAB *next_linear_tab(JOIN* join, JOIN_TAB* tab, 
@@ -1595,8 +1527,8 @@ bool copy_funcs(Item **func_ptr, const THD *thd);
 uint find_shortest_key(TABLE *table, const key_map *usable_keys);
 Field* create_tmp_field_from_field(THD *thd, Field* org_field,
                                    const char *name, TABLE *table,
-                                   Item_field *item);
-
+                                   Item_field *item, uint convert_blob_length);
+                                                                      
 bool is_indexed_agg_distinct(JOIN *join, List<Item_field> *out_args);
 
 /* functions from opt_sum.cc */
@@ -1825,10 +1757,9 @@ bool cp_buffer_from_ref(THD *thd, TABLE *table, TABLE_REF *ref);
 bool error_if_full_join(JOIN *join);
 int report_error(TABLE *table, int error);
 int safe_index_read(JOIN_TAB *tab);
+COND *remove_eq_conds(THD *thd, COND *cond, Item::cond_result *cond_value);
 int get_quick_record(SQL_SELECT *select);
-SORT_FIELD *make_unireg_sortorder(THD *thd, JOIN *join,
-                                  table_map first_table_map,
-                                  ORDER *order, uint *length,
+SORT_FIELD * make_unireg_sortorder(ORDER *order, uint *length,
                                   SORT_FIELD *sortorder);
 int setup_order(THD *thd, Item **ref_pointer_array, TABLE_LIST *tables,
 		List<Item> &fields, List <Item> &all_fields, ORDER *order);
@@ -1856,7 +1787,8 @@ Field *create_tmp_field(THD *thd, TABLE *table,Item *item, Item::Type type,
                         Field **def_field,
 			bool group, bool modify_item,
 			bool table_cant_handle_bit_fields,
-                        bool make_copy_field);
+                        bool make_copy_field,
+                        uint convert_blob_length);
 
 /*
   General routine to change field->ptr of a NULL-terminated array of Field
@@ -1872,9 +1804,9 @@ int test_if_item_cache_changed(List<Cached_item> &list);
 int join_init_read_record(JOIN_TAB *tab);
 int join_read_record_no_init(JOIN_TAB *tab);
 void set_position(JOIN *join,uint idx,JOIN_TAB *table,KEYUSE *key);
-inline Item * and_items(THD *thd, Item* cond, Item *item)
+inline Item * and_items(Item* cond, Item *item)
 {
-  return (cond ? (new (thd->mem_root) Item_cond_and(thd, cond, item)) : item);
+  return (cond? (new Item_cond_and(cond, item)) : item);
 }
 bool choose_plan(JOIN *join, table_map join_tables);
 void optimize_wo_join_buffering(JOIN *join, uint first_tab, uint last_tab, 
@@ -1891,10 +1823,8 @@ inline bool optimizer_flag(THD *thd, uint flag)
   return (thd->variables.optimizer_switch & flag);
 }
 
-/*
 int print_fake_select_lex_join(select_result_sink *result, bool on_the_fly,
                                SELECT_LEX *select_lex, uint8 select_options);
-*/
 
 uint get_index_for_order(ORDER *order, TABLE *table, SQL_SELECT *select,
                          ha_rows limit, ha_rows *scanned_limit, 
@@ -1916,14 +1846,26 @@ void push_index_cond(JOIN_TAB *tab, uint keyno);
 
 /* EXPLAIN-related utility functions */
 int print_explain_message_line(select_result_sink *result, 
-                               uint8 options, bool is_analyze,
+                               uint8 options,
                                uint select_number,
                                const char *select_type,
                                ha_rows *rows,
                                const char *message);
 void explain_append_mrr_info(QUICK_RANGE_SELECT *quick, String *res);
-int append_possible_keys(MEM_ROOT *alloc, String_list &list, TABLE *table, 
-                         key_map possible_keys);
+int print_explain_row(select_result_sink *result,
+                      uint8 options,
+                      uint select_number,
+                      const char *select_type,
+                      const char *table_name,
+                      const char *partitions,
+                      enum join_type jtype,
+                      const char *possible_keys,
+                      const char *index,
+                      const char *key_len,
+                      const char *ref,
+                      ha_rows *rows,
+                      const char *extra);
+void make_possible_keys_line(TABLE *table, key_map possible_keys, String *line);
 
 /****************************************************************************
   Temporary table support for SQL Runtime
@@ -1966,23 +1908,5 @@ ulong check_selectivity(THD *thd,
                         ulong rows_to_read,
                         TABLE *table,
                         List<COND_STATISTIC> *conds);
-
-class Pushdown_query: public Sql_alloc
-{
-public:
-  SELECT_LEX *select_lex;
-  bool store_data_in_temp_table;
-  group_by_handler *handler;
-  Item *having;
-
-  Pushdown_query(SELECT_LEX *select_lex_arg, group_by_handler *handler_arg)
-    : select_lex(select_lex_arg), store_data_in_temp_table(0),
-    handler(handler_arg), having(0) {}
-
-  ~Pushdown_query() { delete handler; }
-
-  /* Function that calls the above scan functions */
-  int execute(JOIN *join);
-};
 
 #endif /* SQL_SELECT_INCLUDED */

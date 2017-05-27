@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /**
   @file
@@ -88,7 +88,7 @@ static bool report_wrong_value(THD *thd, const char *name, const char *val,
   }
 
   push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN, ER_BAD_OPTION_VALUE,
-                      ER_THD(thd, ER_BAD_OPTION_VALUE), val, name);
+                      ER(ER_BAD_OPTION_VALUE), val, name);
   return 0;
 }
 
@@ -111,8 +111,7 @@ static bool report_unknown_option(THD *thd, engine_option_value *val,
   }
 
   push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                      ER_UNKNOWN_OPTION, ER_THD(thd, ER_UNKNOWN_OPTION),
-                      val->name.str);
+                      ER_UNKNOWN_OPTION, ER(ER_UNKNOWN_OPTION), val->name.str);
   DBUG_RETURN(FALSE);
 }
 
@@ -298,7 +297,8 @@ bool parse_option_list(THD* thd, handlerton *hton, void *option_struct_arg,
                        (uchar*)val->name.str, val->name.length))
         continue;
 
-      /* skip duplicates (see engine_option_value constructor above) */
+      seen=true;
+
       if (val->parsed && !val->value.str)
         continue;
 
@@ -306,58 +306,39 @@ bool parse_option_list(THD* thd, handlerton *hton, void *option_struct_arg,
                         *option_struct, suppress_warning || val->parsed, root))
         DBUG_RETURN(TRUE);
       val->parsed= true;
-      seen=true;
       break;
     }
-    if (!seen || (opt->var && !last->value.str))
+    if (!seen)
     {
       LEX_STRING default_val= null_lex_str;
 
       /*
-        Okay, here's the logic for sysvar options:
-        1. When we parse CREATE TABLE and sysvar option was not explicitly
-           mentioned we add it to the list as if it was specified with the
-           *current* value of the underlying sysvar.
-        2. But only if the underlying sysvar value is different from the
-           sysvar's default.
-        3. If it's ALTER TABLE and the sysvar option was not explicitly
-           mentioned - do nothing, do not add it to the list.
-        4. But if it was ALTER TABLE with sysvar option = DEFAULT, we
-           add it to the list (under the same condition #2).
-        5. If we're here parsing the option list from the .frm file
-           for a normal open_table() and the sysvar option was not there -
-           do not add it to the list (makes no sense anyway) and
-           use the *default* value of the underlying sysvar. Because
-           sysvar value can change, but it should not affect existing tables.
+        If it's CREATE/ALTER TABLE parsing mode (options are created in the
+        transient thd->mem_root, not in the long living TABLE_SHARE::mem_root),
+        and variable-backed option was not explicitly set.
 
-        This is how it's implemented: the current sysvar value is added
-        to the list if suppress_warning is FALSE (meaning a table is created,
-        that is CREATE TABLE or ALTER TABLE) and it's actually a CREATE TABLE
-        command or it's an ALTER TABLE and the option was seen (=DEFAULT).
-
-        Note that if the option was set explicitly (not =DEFAULT) it wouldn't
-        have passes the if() condition above.
+        If it's not create, but opening of the existing frm (that was,
+        probably, created with the older version of the storage engine and
+        does not have this option stored), we take the *default* value of the
+        sysvar, not the *current* value. Because we don't want to have
+        different option values for the same table if it's opened many times.
       */
-      if (!suppress_warning && opt->var &&
-          (thd->lex->sql_command == SQLCOM_CREATE_TABLE || seen))
+      if (root == thd->mem_root && opt->var)
       {
         // take a value from the variable and add it to the list
         sys_var *sysvar= find_hton_sysvar(hton, opt->var);
         DBUG_ASSERT(sysvar);
 
-        if (!sysvar->session_is_default(thd))
+        char buf[256];
+        String sbuf(buf, sizeof(buf), system_charset_info), *str;
+        if ((str= sysvar->val_str(&sbuf, thd, OPT_SESSION, 0)))
         {
-          char buf[256];
-          String sbuf(buf, sizeof(buf), system_charset_info), *str;
-          if ((str= sysvar->val_str(&sbuf, thd, OPT_SESSION, &null_lex_str)))
-          {
-            LEX_STRING name= { const_cast<char*>(opt->name), opt->name_length };
-            default_val.str= strmake_root(root, str->ptr(), str->length());
-            default_val.length= str->length();
-            val= new (root) engine_option_value(name, default_val,
-                         opt->type != HA_OPTION_TYPE_ULL, option_list, &last);
-            val->parsed= true;
-          }
+          LEX_STRING name= { const_cast<char*>(opt->name), opt->name_length };
+          default_val.str= strmake_root(root, str->ptr(), str->length());
+          default_val.length= str->length();
+          val= new (root) engine_option_value(name, default_val, true,
+                                              option_list, &last);
+          val->parsed= true;
         }
       }
       set_one_value(opt, thd, &default_val, *option_struct,
@@ -685,25 +666,20 @@ uchar *engine_table_options_frm_image(uchar *buff,
 
   @returns pointer to byte after last recorded in the buffer
 */
-uchar *engine_option_value::frm_read(const uchar *buff, const uchar *buff_end,
-                                     engine_option_value **start,
+uchar *engine_option_value::frm_read(const uchar *buff, engine_option_value **start,
                                      engine_option_value **end, MEM_ROOT *root)
 {
   LEX_STRING name, value;
   uint len;
-#define need_buff(N)  if (buff + (N) >= buff_end) return NULL
 
-  need_buff(3);
   name.length= buff[0];
   buff++;
-  need_buff(name.length + 2);
   if (!(name.str= strmake_root(root, (const char*)buff, name.length)))
     return NULL;
   buff+= name.length;
   len= uint2korr(buff);
   value.length= len & ~FRM_QUOTED_VALUE;
   buff+= 2;
-  need_buff(value.length);
   if (!(value.str= strmake_root(root, (const char*)buff, value.length)))
     return NULL;
   buff+= value.length;
@@ -740,8 +716,8 @@ bool engine_table_options_frm_read(const uchar *buff, uint length,
 
   while (buff < buff_end && *buff)
   {
-    if (!(buff= engine_option_value::frm_read(buff, buff_end,
-                                              &share->option_list, &end, root)))
+    if (!(buff= engine_option_value::frm_read(buff, &share->option_list, &end,
+                                              root)))
       DBUG_RETURN(TRUE);
   }
   buff++;
@@ -750,7 +726,7 @@ bool engine_table_options_frm_read(const uchar *buff, uint length,
   {
     while (buff < buff_end && *buff)
     {
-      if (!(buff= engine_option_value::frm_read(buff, buff_end,
+      if (!(buff= engine_option_value::frm_read(buff,
                                                 &share->field[count]->option_list,
                                                 &end, root)))
         DBUG_RETURN(TRUE);
@@ -762,7 +738,7 @@ bool engine_table_options_frm_read(const uchar *buff, uint length,
   {
     while (buff < buff_end && *buff)
     {
-      if (!(buff= engine_option_value::frm_read(buff, buff_end,
+      if (!(buff= engine_option_value::frm_read(buff,
                                                 &share->key_info[count].option_list,
                                                 &end, root)))
         DBUG_RETURN(TRUE);
@@ -786,8 +762,9 @@ engine_option_value *merge_engine_table_options(engine_option_value *first,
                                                 engine_option_value *second,
                                                 MEM_ROOT *root)
 {
-  engine_option_value *UNINIT_VAR(end), *opt;
+  engine_option_value *end, *opt;
   DBUG_ENTER("merge_engine_table_options");
+  LINT_INIT(end);
 
   /* Create copy of first list */
   for (opt= first, first= 0; opt; opt= opt->next)

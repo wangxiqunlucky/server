@@ -1006,7 +1006,7 @@ void OpenSSL_add_all_algorithms()  // compatibility only
 {}
 
 
-int SSL_library_init()  // compatibility only
+int SSL_library_init()  // compatiblity only
 {
     return 1;
 }

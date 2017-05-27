@@ -62,8 +62,6 @@ static void mysql_change_db_impl(THD *thd,
                                  LEX_STRING *new_db_name,
                                  ulong new_db_access,
                                  CHARSET_INFO *new_db_charset);
-static bool mysql_rm_db_internal(THD *thd, char *db,
-                                 bool if_exists, bool silent);
 
 
 /* Database options hash */
@@ -235,7 +233,7 @@ void my_dbopt_cleanup(void)
     1 on error.
 */
 
-static my_bool get_dbopt(const char *dbname, Schema_specification_st *create)
+static my_bool get_dbopt(const char *dbname, HA_CREATE_INFO *create)
 {
   my_dbopt_t *opt;
   uint length;
@@ -266,7 +264,7 @@ static my_bool get_dbopt(const char *dbname, Schema_specification_st *create)
     1 on error.
 */
 
-static my_bool put_dbopt(const char *dbname, Schema_specification_st *create)
+static my_bool put_dbopt(const char *dbname, HA_CREATE_INFO *create)
 {
   my_dbopt_t *opt;
   uint length;
@@ -335,8 +333,7 @@ static void del_dbopt(const char *path)
   1	Could not create file or write to it.  Error sent through my_error()
 */
 
-static bool write_db_opt(THD *thd, const char *path,
-                         Schema_specification_st *create)
+static bool write_db_opt(THD *thd, const char *path, HA_CREATE_INFO *create)
 {
   register File file;
   char buf[256]; // Should be enough for one option
@@ -382,7 +379,7 @@ static bool write_db_opt(THD *thd, const char *path,
 
 */
 
-bool load_db_opt(THD *thd, const char *path, Schema_specification_st *create)
+bool load_db_opt(THD *thd, const char *path, HA_CREATE_INFO *create)
 {
   File file;
   char buf[256];
@@ -430,7 +427,7 @@ bool load_db_opt(THD *thd, const char *path, Schema_specification_st *create)
               get_charset_by_name(pos+1, MYF(0))))
         {
           sql_print_error("Error while loading database options: '%s':",path);
-          sql_print_error(ER_THD(thd, ER_UNKNOWN_CHARACTER_SET),pos+1);
+          sql_print_error(ER(ER_UNKNOWN_CHARACTER_SET),pos+1);
           create->default_table_charset= default_charset_info;
         }
       }
@@ -440,7 +437,7 @@ bool load_db_opt(THD *thd, const char *path, Schema_specification_st *create)
                                                            MYF(0))))
         {
           sql_print_error("Error while loading database options: '%s':",path);
-          sql_print_error(ER_THD(thd, ER_UNKNOWN_COLLATION),pos+1);
+          sql_print_error(ER(ER_UNKNOWN_COLLATION),pos+1);
           create->default_table_charset= default_charset_info;
         }
       }
@@ -494,7 +491,7 @@ err1:
 */
 
 bool load_db_opt_by_name(THD *thd, const char *db_name,
-                         Schema_specification_st *db_create_info)
+                         HA_CREATE_INFO *db_create_info)
 {
   char db_opt_path[FN_REFLEN + 1];
 
@@ -521,7 +518,7 @@ bool load_db_opt_by_name(THD *thd, const char *db_name,
 
 CHARSET_INFO *get_default_db_collation(THD *thd, const char *db_name)
 {
-  Schema_specification_st db_info;
+  HA_CREATE_INFO db_info;
 
   if (thd->db != NULL && strcmp(db_name, thd->db) == 0)
     return thd->db_charset;
@@ -544,11 +541,10 @@ CHARSET_INFO *get_default_db_collation(THD *thd, const char *db_name)
   Create a database
 
   SYNOPSIS
-  mysql_create_db_iternal()
+  mysql_create_db()
   thd		Thread handler
   db		Name of database to create
 		Function assumes that this is already validated.
-  options       DDL options, e.g. IF NOT EXISTS
   create_info	Database create options (like character set)
   silent	Used by replication when internally creating a database.
 		In this case the entry should not be logged.
@@ -565,14 +561,14 @@ CHARSET_INFO *get_default_db_collation(THD *thd, const char *db_name)
 
 */
 
-static int
-mysql_create_db_internal(THD *thd, char *db,
-                         const DDL_options_st &options,
-                         Schema_specification_st *create_info,
-                         bool silent)
+int mysql_create_db(THD *thd, char *db, HA_CREATE_INFO *create_info,
+                     bool silent)
 {
   char	 path[FN_REFLEN+16];
+  long result= 1;
+  int error= 0;
   MY_STAT stat_info;
+  uint create_options= create_info ? create_info->options : 0;
   uint path_len;
   DBUG_ENTER("mysql_create_db");
 
@@ -600,46 +596,32 @@ mysql_create_db_internal(THD *thd, char *db,
   path_len= build_table_filename(path, sizeof(path) - 1, db, "", "", 0);
   path[path_len-1]= 0;                    // Remove last '/' from path
 
-  long affected_rows= 1;
-  if (!mysql_file_stat(key_file_misc, path, &stat_info, MYF(0)))
+  if (mysql_file_stat(key_file_misc, path, &stat_info, MYF(0)))
   {
-    // The database directory does not exist, or my_file_stat() failed
-    if (my_errno != ENOENT)
+    if (!(create_options & HA_LEX_CREATE_IF_NOT_EXISTS))
     {
-      my_error(EE_STAT, MYF(0), path, my_errno);
-      DBUG_RETURN(1);
+      my_error(ER_DB_CREATE_EXISTS, MYF(0), db);
+      error= -1;
+      goto exit;
     }
-  }
-  else if (options.or_replace())
-  {
-    if (mysql_rm_db_internal(thd, db, 0, true)) // Removing the old database
-      DBUG_RETURN(1);
-    /*
-      Reset the diagnostics m_status.
-      It might be set ot DA_OK in mysql_rm_db.
-    */
-    thd->get_stmt_da()->reset_diagnostics_area();
-    affected_rows= 2;
-  }
-  else if (options.if_not_exists())
-  {
     push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
-                        ER_DB_CREATE_EXISTS, ER_THD(thd, ER_DB_CREATE_EXISTS),
-                        db);
-    affected_rows= 0;
+			ER_DB_CREATE_EXISTS, ER(ER_DB_CREATE_EXISTS), db);
+    error= 0;
     goto not_silent;
   }
   else
   {
-    my_error(ER_DB_CREATE_EXISTS, MYF(0), db);
-    DBUG_RETURN(-1);
-  }
-
-
-  if (my_mkdir(path, 0777, MYF(0)) < 0)
-  {
-    my_error(ER_CANT_CREATE_DB, MYF(0), db, my_errno);
-    DBUG_RETURN(-1);
+    if (my_errno != ENOENT)
+    {
+      my_error(EE_STAT, MYF(0), path, my_errno);
+      goto exit;
+    }
+    if (my_mkdir(path,0777,MYF(0)) < 0)
+    {
+      my_error(ER_CANT_CREATE_DB, MYF(0), db, my_errno);
+      error= -1;
+      goto exit;
+    }
   }
 
   path[path_len-1]= FN_LIBCHAR;
@@ -652,7 +634,10 @@ mysql_create_db_internal(THD *thd, char *db,
     */
     path[path_len]= 0;
     if (rmdir(path) >= 0)
-      DBUG_RETURN(-1);
+    {
+      error= -1;
+      goto exit;
+    }
     /*
       We come here when we managed to create the database, but not the option
       file.  In this case it's best to just continue as if nothing has
@@ -670,6 +655,10 @@ not_silent:
     query=        thd->query();
     query_length= thd->query_length();
     DBUG_ASSERT(query);
+
+    ha_binlog_log_query(thd, 0, LOGCOM_CREATE_DB,
+                        query, query_length,
+                        db, "");
 
     if (mysql_bin_log.is_open())
     {
@@ -702,20 +691,22 @@ not_silent:
         metadata lock on the schema
       */
       if (mysql_bin_log.write(&qinfo))
-        DBUG_RETURN(-1);
+      {
+        error= -1;
+        goto exit;
+      }
     }
-    my_ok(thd, affected_rows);
+    my_ok(thd, result);
   }
 
-  DBUG_RETURN(0);
+exit:
+  DBUG_RETURN(error);
 }
 
 
 /* db-name is already validated when we come here */
 
-static bool
-mysql_alter_db_internal(THD *thd, const char *db,
-                        Schema_specification_st *create_info)
+bool mysql_alter_db(THD *thd, const char *db, HA_CREATE_INFO *create_info)
 {
   char path[FN_REFLEN+16];
   long result=1;
@@ -744,6 +735,10 @@ mysql_alter_db_internal(THD *thd, const char *db,
     thd->variables.collation_database= thd->db_charset;
   }
 
+  ha_binlog_log_query(thd, 0, LOGCOM_ALTER_DB,
+                      thd->query(), thd->query_length(),
+                      db, "");
+
   if (mysql_bin_log.is_open())
   {
     int errcode= query_error_code(thd, TRUE); 
@@ -771,31 +766,6 @@ exit:
 }
 
 
-int mysql_create_db(THD *thd, char *db,
-                    const DDL_options_st &options,
-                    const Schema_specification_st *create_info)
-{
-  /*
-    As mysql_create_db_internal() may modify Db_create_info structure passed
-    to it, we need to use a copy to make execution prepared statement- safe.
-  */
-  Schema_specification_st tmp(*create_info);
-  return mysql_create_db_internal(thd, db, options, &tmp, false);
-}
-
-
-bool mysql_alter_db(THD *thd, const char *db,
-                    const Schema_specification_st *create_info)
-{
-  /*
-    As mysql_alter_db_internal() may modify Db_create_info structure passed
-    to it, we need to use a copy to make execution prepared statement- safe.
-  */
-  Schema_specification_st tmp(*create_info);
-  return mysql_alter_db_internal(thd, db, &tmp);
-}
-
-
 /**
   Drop all tables, routines and events in a database and the database itself.
 
@@ -811,8 +781,7 @@ bool mysql_alter_db(THD *thd, const char *db,
   @retval  true   Error
 */
 
-static bool
-mysql_rm_db_internal(THD *thd,char *db, bool if_exists, bool silent)
+bool mysql_rm_db(THD *thd,char *db,bool if_exists, bool silent)
 {
   ulong deleted_tables= 0;
   bool error= true, rm_mysql_schema;
@@ -866,8 +835,7 @@ mysql_rm_db_internal(THD *thd,char *db, bool if_exists, bool silent)
     else
     {
       push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
-			  ER_DB_DROP_EXISTS, ER_THD(thd, ER_DB_DROP_EXISTS),
-                          db);
+			  ER_DB_DROP_EXISTS, ER(ER_DB_DROP_EXISTS), db);
       error= false;
       goto update_binlog;
     }
@@ -929,6 +897,11 @@ mysql_rm_db_internal(THD *thd,char *db, bool if_exists, bool silent)
       should be dropped while the database is being cleaned, but in
       the event that a change in the code to remove other objects is
       made, these drops should still not be logged.
+
+      Notice that the binary log have to be enabled over the call to
+      ha_drop_database(), since NDB otherwise detects the binary log
+      as disabled and will not log the drop database statement on any
+      other connected server.
     */
 
     ha_drop_database(path);
@@ -1054,12 +1027,6 @@ exit:
     mysql_change_db_impl(thd, NULL, 0, thd->variables.collation_server);
   my_dirend(dirp);
   DBUG_RETURN(error);
-}
-
-
-bool mysql_rm_db(THD *thd,char *db, bool if_exists)
-{
-  return mysql_rm_db_internal(thd, db, if_exists, false);
 }
 
 
@@ -1479,7 +1446,7 @@ bool mysql_change_db(THD *thd, const LEX_STRING *new_db_name, bool force_switch)
     }
     else
     {
-      my_message(ER_NO_DB_ERROR, ER_THD(thd, ER_NO_DB_ERROR), MYF(0));
+      my_message(ER_NO_DB_ERROR, ER(ER_NO_DB_ERROR), MYF(0));
 
       DBUG_RETURN(TRUE);
     }
@@ -1554,7 +1521,7 @@ bool mysql_change_db(THD *thd, const LEX_STRING *new_db_name, bool force_switch)
              sctx->priv_user,
              sctx->priv_host,
              new_db_file_name.str);
-    general_log_print(thd, COM_INIT_DB, ER_THD(thd, ER_DBACCESS_DENIED_ERROR),
+    general_log_print(thd, COM_INIT_DB, ER(ER_DBACCESS_DENIED_ERROR),
                       sctx->priv_user, sctx->priv_host, new_db_file_name.str);
     my_free(new_db_file_name.str);
     DBUG_RETURN(TRUE);
@@ -1570,7 +1537,7 @@ bool mysql_change_db(THD *thd, const LEX_STRING *new_db_name, bool force_switch)
       /* Throw a warning and free new_db_file_name. */
 
       push_warning_printf(thd, Sql_condition::WARN_LEVEL_NOTE,
-                          ER_BAD_DB_ERROR, ER_THD(thd, ER_BAD_DB_ERROR),
+                          ER_BAD_DB_ERROR, ER(ER_BAD_DB_ERROR),
                           new_db_file_name.str);
 
       my_free(new_db_file_name.str);
@@ -1665,7 +1632,7 @@ bool mysql_upgrade_db(THD *thd, LEX_STRING *old_db)
   int error= 0, change_to_newdb= 0;
   char path[FN_REFLEN+16];
   uint length;
-  Schema_specification_st create_info;
+  HA_CREATE_INFO create_info;
   MY_DIR *dirp;
   TABLE_LIST *table_list;
   SELECT_LEX *sl= thd->lex->current_select;
@@ -1713,8 +1680,7 @@ bool mysql_upgrade_db(THD *thd, LEX_STRING *old_db)
   }
 
   /* Step1: Create the new database */
-  if ((error= mysql_create_db_internal(thd, new_db.str,
-                                       DDL_options(), &create_info, 1)))
+  if ((error= mysql_create_db(thd, new_db.str, &create_info, 1)))
     goto exit;
 
   /* Step2: Move tables to the new database */
@@ -1738,7 +1704,7 @@ bool mysql_upgrade_db(THD *thd, LEX_STRING *old_db)
 
       table_str.length= filename_to_tablename(file->name,
                                               tname, sizeof(tname)-1);
-      table_str.str= (char*) thd->memdup(tname, table_str.length + 1);
+      table_str.str= (char*) sql_memdup(tname, table_str.length + 1);
       Table_ident *old_ident= new Table_ident(thd, *old_db, table_str, 0);
       Table_ident *new_ident= new Table_ident(thd, new_db, table_str, 0);
       if (!old_ident || !new_ident ||
@@ -1838,7 +1804,7 @@ bool mysql_upgrade_db(THD *thd, LEX_STRING *old_db)
     to execute them again.
     mysql_rm_db() also "unuses" if we drop the current database.
   */
-  error= mysql_rm_db_internal(thd, old_db->str, 0, true);
+  error= mysql_rm_db(thd, old_db->str, 0, 1);
 
   /* Step8: logging */
   if (mysql_bin_log.is_open())

@@ -73,32 +73,12 @@ IF(UNIX)
 )
 ENDIF()
 
-# Configure two scripts from one 'in' file.
-# The maria_add_gis_sp.sql - to be sent to 'mysql' tool
-# and the maria_add_gis_sp_bootstrap.sql, that can be sent to
-# the server as a bootstrap command.
-
-SET(ADD_GIS_SP_SET_DELIMITER "delimiter |")
-SET(ADD_GIS_SP_RESET_DELIMITER "delimiter ;")
-SET(ADD_GIS_SP_EOL "|")
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/maria_add_gis_sp.sql.in
-  ${CMAKE_CURRENT_BINARY_DIR}/maria_add_gis_sp.sql ESCAPE_QUOTES @ONLY)
-
-SET(ADD_GIS_SP_SET_DELIMITER "")
-SET(ADD_GIS_SP_RESET_DELIMITER "")
-SET(ADD_GIS_SP_EOL ";")
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/maria_add_gis_sp.sql.in
-  ${CMAKE_CURRENT_BINARY_DIR}/maria_add_gis_sp_bootstrap.sql ESCAPE_QUOTES @ONLY)
-
 INSTALL(FILES 
   ${CMAKE_CURRENT_SOURCE_DIR}/mysql_system_tables.sql 
   ${CMAKE_CURRENT_SOURCE_DIR}/mysql_system_tables_data.sql
   ${CMAKE_CURRENT_SOURCE_DIR}/mysql_performance_tables.sql
   ${CMAKE_CURRENT_SOURCE_DIR}/fill_help_tables.sql
   ${CMAKE_CURRENT_SOURCE_DIR}/mysql_test_data_timezone.sql
-  ${CMAKE_CURRENT_SOURCE_DIR}/mysql_to_mariadb.sql
-  ${CMAKE_CURRENT_BINARY_DIR}/maria_add_gis_sp.sql
-  ${CMAKE_CURRENT_BINARY_DIR}/maria_add_gis_sp_bootstrap.sql
   ${FIX_PRIVILEGES_SQL}
   DESTINATION ${INSTALL_MYSQLSHAREDIR} COMPONENT Server
 )
@@ -109,7 +89,7 @@ IF(MALLOC_LIB)
   INSTALL(FILES ${MALLOC_LIB} DESTINATION ${INSTALL_LIBDIR} OPTIONAL)
 ENDIF()
 
-IF(CMAKE_GENERATOR MATCHES "Makefiles|Ninja")
+IF(CMAKE_GENERATOR MATCHES "Makefiles")
   FOREACH(ARCH ${CMAKE_OSX_ARCHITECTURES})
     SET(CFLAGS   "${CFLAGS} -arch ${ARCH}")
     SET(CXXFLAGS "${CXXFLAGS} -arch ${ARCH}")
@@ -197,32 +177,33 @@ ENDIF(UNIX)
 
 IF(INSTALL_LAYOUT MATCHES "STANDALONE")
   SET(prefix ".")
-  SET(bindir ${prefix}/${INSTALL_BINDIR})
-  SET(sbindir ${prefix}/${INSTALL_SBINDIR})
-  SET(scriptdir ${prefix}/${INSTALL_BINDIR})
-  SET(libexecdir ${prefix}/${INSTALL_SBINDIR})
-  SET(pkgdatadir ${prefix}/${INSTALL_MYSQLSHAREDIR})
-  SET(localstatedir ${prefix}/data)
 ELSE()
   SET(prefix "${CMAKE_INSTALL_PREFIX}")
-  SET(bindir ${INSTALL_BINDIRABS})
-  SET(sbindir ${INSTALL_SBINDIRABS})
-  SET(scriptdir ${INSTALL_BINDIRABS})
-  SET(libexecdir ${INSTALL_SBINDIRABS})
-  SET(pkgdatadir ${INSTALL_MYSQLSHAREDIRABS})
+ENDIF()
+
+SET(bindir ${prefix}/${INSTALL_BINDIR})
+SET(sbindir ${prefix}/${INSTALL_SBINDIR})
+SET(scriptdir ${prefix}/${INSTALL_BINDIR})
+SET(libexecdir ${prefix}/${INSTALL_SBINDIR})
+SET(pkgdatadir ${prefix}/${INSTALL_MYSQLSHAREDIR})
+IF(INSTALL_LAYOUT MATCHES "STANDALONE")
+  SET(localstatedir ${prefix}/data)
+ELSE()
   SET(localstatedir ${MYSQL_DATADIR})
 ENDIF()
 
 IF(UNIX)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mysql_install_db.sh
   ${CMAKE_CURRENT_BINARY_DIR}/mysql_install_db ESCAPE_QUOTES @ONLY)
+  SET(DEST ${INSTALL_SCRIPTDIR})
+  SET(EXT)
   EXECUTE_PROCESS(
   COMMAND chmod +x ${CMAKE_CURRENT_BINARY_DIR}/mysql_install_db
   )
 
 INSTALL_SCRIPT(
  "${CMAKE_CURRENT_BINARY_DIR}/mysql_install_db"
-  DESTINATION ${INSTALL_SCRIPTDIR}
+  DESTINATION ${DEST}
   COMPONENT Server
   )
 ENDIF()
@@ -233,15 +214,15 @@ IF(INSTALL_SYSCONFDIR)
 ELSE()
   SET(sysconfdir "/etc")
 ENDIF()
-SET(bindir ${INSTALL_BINDIRABS})
-SET(libexecdir ${INSTALL_SBINDIRABS})
-SET(scriptdir ${INSTALL_BINDIRABS})
-SET(datadir ${INSTALL_MYSQLSHAREDIRABS})
-SET(pkgdatadir ${INSTALL_MYSQLSHAREDIRABS})
+SET(bindir ${prefix}/${INSTALL_BINDIR})
+SET(libexecdir ${prefix}/${INSTALL_SBINDIR})
+SET(scriptdir ${prefix}/${INSTALL_BINDIR})
+SET(datadir ${prefix}/${INSTALL_MYSQLSHAREDIR})
+SET(pkgdatadir ${prefix}/${INSTALL_MYSQLSHAREDIR})
 SET(libsubdir  ${INSTALL_LIBDIR})
-SET(pkgincludedir ${INSTALL_INCLUDEDIRABS})
-SET(pkglibdir ${INSTALL_LIBDIRABS})
-SET(pkgplugindir ${INSTALL_PLUGINDIRABS})
+SET(pkgincludedir ${prefix}/${INSTALL_INCLUDEDIR})
+SET(pkglibdir ${prefix}/${INSTALL_LIBDIR})
+SET(pkgplugindir ${prefix}/${INSTALL_PLUGINDIR})
 SET(localstatedir ${MYSQL_DATADIR})
 
 SET(RPATH_OPTION "")
@@ -256,6 +237,57 @@ ELSE()
   SET(TARGET_LINUX "false")
 ENDIF()
 
+# Use cmake variables to inspect dependencies for 
+# mysqlclient library (add -l stuff)
+SET(CLIENT_LIBS "")
+SET(LIBS "")
+
+# Avoid compatibility warning about lists with empty elements
+IF(POLICY CMP0011)
+  CMAKE_POLICY(SET CMP0011 NEW)
+ENDIF()
+IF(POLICY CMP0007)
+  CMAKE_POLICY(SET CMP0007 OLD)
+ENDIF()
+
+# Extract dependencies using CMake's internal ${target}_LIB_DEPENDS variable
+# returned string in ${var} is can be passed to linker's command line
+MACRO(EXTRACT_LINK_LIBRARIES target var)
+  IF(${target}_LIB_DEPENDS)
+    LIST(REMOVE_ITEM ${target}_LIB_DEPENDS "")
+    LIST(REMOVE_DUPLICATES ${target}_LIB_DEPENDS)
+    FOREACH(lib ${${target}_LIB_DEPENDS})
+      # Filter out "general", it is not a library, just CMake hint
+      # Also, remove duplicates
+      IF(NOT lib STREQUAL "general" AND NOT ${var}  MATCHES "-l${lib} ")
+        IF (lib MATCHES "^\\-l")
+          SET(${var} "${${var}} ${lib} ") 
+        ELSEIF(lib MATCHES "^/")
+          IF (lib MATCHES "\\.(a|so([0-9.]*)|lib|dll|dylib)$")
+            # Full path, convert to just filename, strip "lib" prefix and extension
+            GET_FILENAME_COMPONENT(lib "${lib}" NAME_WE)
+            STRING(REGEX REPLACE "^lib" "" lib "${lib}")
+            SET(${var} "${${var}}-l${lib} " ) 
+          ENDIF()
+        ELSE()
+          SET(${var} "${${var}}-l${lib} " ) 
+        ENDIF()
+      ENDIF()
+    ENDFOREACH()
+  ENDIF()
+  IF(MSVC)
+    STRING(REPLACE "-l" "" ${var} "${${var}}")
+  ENDIF()
+ENDMACRO()
+
+EXTRACT_LINK_LIBRARIES(mysqlclient CLIENT_LIBS)
+EXTRACT_LINK_LIBRARIES(mysqlserver LIBS)
+
+# mysql_config evaluates ${LIBDL}, we want to avoid it
+# as our CLIENT_LIBS and LIBS are already correct
+SET(LIBDL)
+
+SET(NON_THREADED_LIBS ${CLIENT_LIBS})
 SET(mysql_config_COMPONENT COMPONENT Development)
 SET(msql2mysql_COMPONENT COMPONENT Client)
 SET(mysqlaccess_COMPONENT COMPONENT Client)
@@ -288,25 +320,6 @@ IF(WIN32)
     INSTALL_SCRIPT(${CMAKE_CURRENT_BINARY_DIR}/${file}.pl COMPONENT Server_Scripts)
   ENDFOREACH()
 ELSE()
-  IF(WITH_WSREP)
-    SET(WSREP_SCRIPTS
-      wsrep_sst_mysqldump
-      wsrep_sst_rsync
-      wsrep_sst_xtrabackup
-      wsrep_sst_xtrabackup-v2
-    )
-    INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/wsrep_sst_common
-            DESTINATION ${INSTALL_BINDIR} COMPONENT Server)
-  ENDIF()
-  IF (NOT WITHOUT_SERVER)
-    SET(SERVER_SCRIPTS
-      mysql_fix_extensions
-      mysql_zap
-      mysqld_multi
-      mysqld_safe
-      mysqldumpslow
-    )
-  ENDIF()
   # Configure this one, for testing, but do not install it.
   CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/mysql_config.pl.in
     ${CMAKE_CURRENT_BINARY_DIR}/mysql_config.pl ESCAPE_QUOTES @ONLY)
@@ -314,16 +327,18 @@ ELSE()
   SET(BIN_SCRIPTS
     msql2mysql
     mysql_config
+    mysql_fix_extensions
     mysql_setpermission
     mysql_secure_installation
+    mysql_zap
     mysqlaccess
     mysql_convert_table_format
     mysql_find_rows
     mytop
     mysqlhotcopy
-    ${SERVER_SCRIPTS}
-    ${WSREP_SCRIPTS}
-    ${SYSTEMD_SCRIPTS}
+    mysqldumpslow
+    mysqld_multi
+    mysqld_safe
   )
   FOREACH(file ${BIN_SCRIPTS})
     IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${file}.sh)

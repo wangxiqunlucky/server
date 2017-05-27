@@ -155,6 +155,7 @@ ARRAY::ARRAY(PGLOBAL g, int type, int size, int length, int prec)
   switch (type) {
     case TYPE_STRING:
       Len = length;
+      /* fall through */
     case TYPE_SHORT:
     case TYPE_INT:
     case TYPE_DOUBLE:
@@ -592,6 +593,7 @@ int ARRAY::Convert(PGLOBAL g, int k, PVAL vp)
   switch (Type) {
     case TYPE_DOUBLE:
       prec = 2;
+      /* fall through */
     case TYPE_SHORT:
     case TYPE_INT:
     case TYPE_DATE:
@@ -973,7 +975,7 @@ int ARRAY::BlockTest(PGLOBAL, int opc, int opm,
 PSZ ARRAY::MakeArrayList(PGLOBAL g)
   {
   char   *p, *tp;
-  int     i;
+  int    i;
   size_t  z, len = 2;
 
   if (Type == TYPE_LIST)
@@ -1033,7 +1035,7 @@ void ARRAY::Printf(PGLOBAL g, FILE *f, uint n)
   } else
     fprintf(f, "%sVALLST: numval=%d\n", m, Nval);
 
-  } // end of Printf
+  } // end of Print
 
 /***********************************************************************/
 /*  Make string output of ARRAY  contents.                             */
@@ -1045,7 +1047,7 @@ void ARRAY::Prints(PGLOBAL, char *ps, uint z)
 
   sprintf(ps, "ARRAY: type=%d\n", Type);
   // More to be implemented later
-  } // end of Prints
+  } // end of Print
 
 /* -------------------------- Class MULAR ---------------------------- */
 

@@ -1943,7 +1943,6 @@ bool JDBConn::SetParam(JDBCCOL *colp)
 			} // endif len
 
 			pval[n] = AllocateValue(g, crp->Type, len);
-			pval[n]->SetNullable(true);
 
 			if (crp->Type == TYPE_STRING) {
 				pbuf[n] = (char*)PlugSubAlloc(g, NULL, len);

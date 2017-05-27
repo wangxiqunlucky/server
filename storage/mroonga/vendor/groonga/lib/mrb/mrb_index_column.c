@@ -24,7 +24,6 @@
 #include <mruby/class.h>
 #include <mruby/data.h>
 
-#include "mrb_ctx.h"
 #include "mrb_converter.h"
 #include "mrb_index_column.h"
 #include "mrb_operator.h"
@@ -78,22 +77,14 @@ mrb_grn_index_column_estimate_size_for_query(mrb_state *mrb, mrb_value self)
 {
   grn_ctx *ctx = (grn_ctx *)mrb->ud;
   grn_obj *index_column;
-  grn_obj *lexicon;
-  mrb_value mrb_query;
-  void *query;
-  unsigned int query_size;
-  grn_mrb_value_to_raw_data_buffer buffer;
+  char *query;
+  mrb_int query_len;
   mrb_value mrb_options = mrb_nil_value();
   grn_search_optarg optarg;
   unsigned int size;
 
   index_column = DATA_PTR(self);
-  mrb_get_args(mrb, "o|H", &mrb_query, &mrb_options);
-
-  lexicon = grn_ctx_at(ctx, index_column->header.domain);
-  grn_mrb_value_to_raw_data_buffer_init(mrb, &buffer);
-  grn_mrb_value_to_raw_data(mrb, "query", mrb_query, lexicon->header.domain,
-                            &buffer, &query, &query_size);
+  mrb_get_args(mrb, "s|H", &query, &query_len, &mrb_options);
 
   memset(&optarg, 0, sizeof(grn_search_optarg));
   optarg.mode = GRN_OP_EXACT;
@@ -108,11 +99,7 @@ mrb_grn_index_column_estimate_size_for_query(mrb_state *mrb, mrb_value self)
   }
 
   size = grn_ii_estimate_size_for_query(ctx, (grn_ii *)index_column,
-                                        query, query_size, &optarg);
-  grn_mrb_value_to_raw_data_buffer_fin(mrb, &buffer);
-
-  grn_mrb_ctx_check(mrb);
-
+                                        query, query_len, &optarg);
   return mrb_fixnum_value(size);
 }
 

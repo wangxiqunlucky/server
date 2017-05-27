@@ -38,13 +38,6 @@
 //#include "token.h"
 //#include "select.h"
 #include "xindex.h"
-#if defined(MONGO_SUPPORT)
-#include "filamtxt.h"
-#include "tabdos.h"
-#include "tabjson.h"
-#include "tabext.h"
-#include "tabmgo.h"
-#endif   // MONGO_SUPPORT
 
 /***********************************************************************/
 /*  Utility routines.                                                  */
@@ -1200,7 +1193,7 @@ bool FILTER::Convert(PGLOBAL g, bool having)
           Arg(0) = pXVOID;
           } // endif void
 
-        // pass thru
+        // fall through
       case OP_IN:
         // For IN operator do optimize if operand is an array
         if (GetArgType(1) != TYPE_ARRAY)
@@ -1267,6 +1260,7 @@ bool FILTER::Eval(PGLOBAL g)
         } // endif Opm
 
       // For modified operators, pass thru
+      /* fall through */
     case OP_IN:
     case OP_EXIST:
       // For IN operations, special processing is done here
@@ -1412,94 +1406,6 @@ PFIL FILTER::Copy(PTABS t)
   } // end of Copy
 #endif // 0
 
-/***********************************************************************/
-/*  Make selector json representation for Mongo tables.                */
-/***********************************************************************/
-#if defined(MONGO_SUPPORT)
-bool FILTER::MakeSelector(PGLOBAL g, PSTRG s, bool m)
-{
-	s->Append('{');
-
-	if (Opc == OP_AND || Opc == OP_OR) {
-		if (GetArgType(0) != TYPE_FILTER || GetArgType(1) != TYPE_FILTER)
-			return true;
-
-		s->Append("\"$");
-		s->Append(Opc == OP_AND ? "and" : "or");
-		s->Append("\":[");
-
-		if (((PFIL)Arg(0))->MakeSelector(g, s, m))
-			return true;
-
-		s->Append(',');
-
-		if (((PFIL)Arg(1))->MakeSelector(g, s, m))
-			return true;
-
-		s->Append(']');
-	} else {
-		char *pth, buf[501];
-
-		if (GetArgType(0) != TYPE_COLBLK)
-			return true;
-
-		s->Append('"');
-
-		if (m)
-		  pth = ((PMGOCOL)Arg(0))->Jpath;
-		else if (!(pth = ((PJCOL)Arg(0))->GetJpath(g, false)))
-			return true;
-
-		s->Append(pth);
-		s->Append("\":{\"$");
-
-		switch (Opc) {
-			case OP_EQ:
-				s->Append("eq");
-				break;
-			case OP_NE:
-				s->Append("ne");
-				break;
-			case OP_GT:
-				s->Append("gt");
-				break;
-			case OP_GE:
-				s->Append("gte");
-				break;
-			case OP_LT:
-				s->Append("lt");
-				break;
-			case OP_LE:
-				s->Append("lte");
-				break;
-				//case OP_NULL:
-				//	s->Append("ne");
-				//	break;
-				//case OP_LIKE:
-				//	s->Append("ne");
-				//	break;
-				//case OP_EXIST:
-				//	s->Append("ne");
-				//	break;
-			default:
-				return true;
-		} // endswitch Opc
-
-		s->Append("\":");
-
-		if (GetArgType(1) == TYPE_COLBLK)
-			return true;
-
-		Arg(1)->Prints(g, buf, 500);
-		s->Append(buf);
-		s->Append('}');
-	} // endif Opc
-
-	s->Append('}');
-	return false;
-} // end of MakeSelector
-#endif   // MONGO_SUPPORT
-
 /*********************************************************************/
 /*  Make file output of FILTER contents.                             */
 /*********************************************************************/
@@ -1531,7 +1437,7 @@ void FILTER::Printf(PGLOBAL g, FILE *f, uint n)
 
     } // endfor fp
 
-  } // end of Printf
+  } // end of Print
 
 /***********************************************************************/
 /*  Make string output of TABLE contents (z should be checked).        */
@@ -1673,7 +1579,7 @@ void FILTER::Prints(PGLOBAL g, char *ps, uint z)
     bcp = bxp;
     } while (bcp); // enddo
 
-  } // end of Prints
+  } // end of Print
 
 
 /* -------------------- Derived Classes Functions -------------------- */
@@ -1791,6 +1697,8 @@ PFIL PrepareFilter(PGLOBAL g, PFIL fp, bool having)
 
   if (trace)
     htrc("PrepareFilter: fp=%p having=%d\n", fp, having);
+//if (fp)
+//  fp->Print(g, debug, 0);
 
   while (fp) {
     if (fp->Opc == OP_SEP)

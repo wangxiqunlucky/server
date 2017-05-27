@@ -1,7 +1,6 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2013, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2014, MariaDB Corporation. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -124,8 +123,7 @@ buf_read_page_low(
 			use to stop dangling page reads from a tablespace
 			which we have DISCARDed + IMPORTed back */
 	ulint	offset,	/*!< in: page number */
-	trx_t*	trx,	/*!< in: trx */
-	buf_page_t** rbpage) /*!< out: page */
+	trx_t*	trx)
 {
 	buf_page_t*	bpage;
 	ulint		wake_later;
@@ -223,8 +221,6 @@ not_to_recover:
 	ut_ad(buf_page_in_file(bpage));
 	ut_ad(!mutex_own(&buf_pool_from_bpage(bpage)->LRU_list_mutex));
 
-	byte* frame = zip_size ? bpage->zip.data : ((buf_block_t*) bpage)->frame;
-
 	if (sync) {
 		thd_wait_begin(NULL, THD_WAIT_DISKIO);
 	}
@@ -233,14 +229,14 @@ not_to_recover:
 		*err = _fil_io(OS_FILE_READ | wake_later
 			       | ignore_nonexistent_pages,
 			       sync, space, zip_size, offset, 0, zip_size,
-			       frame, bpage, 0, trx);
+			       bpage->zip.data, bpage, trx);
 	} else {
 		ut_a(buf_page_get_state(bpage) == BUF_BLOCK_FILE_PAGE);
 
 		*err = _fil_io(OS_FILE_READ | wake_later
 			      | ignore_nonexistent_pages,
 			      sync, space, 0, offset, 0, UNIV_PAGE_SIZE,
-			      frame, bpage, &bpage->write_size, trx);
+			      ((buf_block_t*) bpage)->frame, bpage, trx);
 	}
 
 	if (sync) {
@@ -260,15 +256,8 @@ not_to_recover:
 		/* The i/o is already completed when we arrive from
 		fil_read */
 		if (!buf_page_io_complete(bpage)) {
-			if (rbpage) {
-				*rbpage = bpage;
-			}
 			return(0);
 		}
-	}
-
-	if (rbpage) {
-		*rbpage = bpage;
 	}
 
 	return(1);
@@ -406,7 +395,7 @@ read_ahead:
 				&err, false,
 				ibuf_mode | OS_AIO_SIMULATED_WAKE_LATER,
 				space, zip_size, FALSE,
-				tablespace_version, i, trx, NULL);
+				tablespace_version, i, trx);
 			if (err == DB_TABLESPACE_DELETED) {
 				ut_print_timestamp(stderr);
 				fprintf(stderr,
@@ -454,11 +443,10 @@ UNIV_INTERN
 ibool
 buf_read_page(
 /*==========*/
-	ulint	space,		/*!< in: space id */
-	ulint	zip_size,	/*!< in: compressed page size in bytes, or 0 */
-	ulint	offset,		/*!< in: page number */
-	trx_t*	trx,		/*!< in: trx */
-	buf_page_t** bpage)	/*!< out: page */
+	ulint	space,	/*!< in: space id */
+	ulint	zip_size,/*!< in: compressed page size in bytes, or 0 */
+	ulint	offset,	/*!< in: page number */
+	trx_t*	trx)
 {
 	ib_int64_t	tablespace_version;
 	ulint		count;
@@ -471,7 +459,7 @@ buf_read_page(
 
 	count = buf_read_page_low(&err, true, BUF_READ_ANY_PAGE, space,
 				  zip_size, FALSE,
-				  tablespace_version, offset, trx, bpage);
+				  tablespace_version, offset, trx);
 	srv_stats.buf_pool_reads.add(count);
 	if (err == DB_TABLESPACE_DELETED) {
 		ut_print_timestamp(stderr);
@@ -519,7 +507,7 @@ buf_read_page_async(
 				  | OS_AIO_SIMULATED_WAKE_LATER
 				  | BUF_READ_IGNORE_NONEXISTENT_PAGES,
 				  space, zip_size, FALSE,
-				  tablespace_version, offset, NULL,NULL);
+				  tablespace_version, offset, NULL);
 	srv_stats.buf_pool_reads.add(count);
 
 	/* We do not increment number of I/O operations used for LRU policy
@@ -787,7 +775,7 @@ buf_read_ahead_linear(
 			count += buf_read_page_low(
 				&err, false,
 				ibuf_mode,
-				space, zip_size, FALSE, tablespace_version, i, trx, NULL);
+				space, zip_size, FALSE, tablespace_version, i, trx);
 			if (err == DB_TABLESPACE_DELETED) {
 				ut_print_timestamp(stderr);
 				fprintf(stderr,
@@ -877,7 +865,7 @@ buf_read_ibuf_merge_pages(
 		buf_read_page_low(&err, sync && (i + 1 == n_stored),
 				  BUF_READ_ANY_PAGE, space_ids[i],
 				  zip_size, TRUE, space_versions[i],
-				  page_nos[i], NULL, NULL);
+				  page_nos[i], NULL);
 
 		if (UNIV_UNLIKELY(err == DB_TABLESPACE_DELETED)) {
 tablespace_deleted:
@@ -998,15 +986,11 @@ not_to_recover:
 			count++;
 
 			if (count > 1000) {
-				fprintf(stderr,
-					"InnoDB: Error: InnoDB has waited for"
-					" 10 seconds for pending\n"
-					"InnoDB: reads to the buffer pool to"
-					" be finished.\n"
-					"InnoDB: Number of pending reads %lu,"
-					" pending pread calls %lu\n",
-					(ulong) buf_pool->n_pend_reads,
-					(ulong) os_file_n_pending_preads);
+				ib_logf(IB_LOG_LEVEL_ERROR,
+					"waited for 10 seconds for " ULINTPF
+					" pending reads to the buffer pool to"
+					" be finished",
+					buf_pool->n_pend_reads);
 
 				os_aio_print_debug = TRUE;
 			}
@@ -1017,12 +1001,12 @@ not_to_recover:
 		if ((i + 1 == n_stored) && sync) {
 			buf_read_page_low(&err, true, BUF_READ_ANY_PAGE, space,
 					  zip_size, TRUE, tablespace_version,
-					  page_nos[i], NULL, NULL);
+					  page_nos[i], NULL);
 		} else {
 			buf_read_page_low(&err, false, BUF_READ_ANY_PAGE
 					  | OS_AIO_SIMULATED_WAKE_LATER,
 					  space, zip_size, TRUE,
-					  tablespace_version, page_nos[i], NULL, NULL);
+					  tablespace_version, page_nos[i], NULL);
 		}
 	}
 

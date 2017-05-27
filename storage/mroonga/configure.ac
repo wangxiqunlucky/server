@@ -309,30 +309,20 @@ CONFIG_OPTION_GROONGA_NORMALIZER_MYSQL
 
 AC_ARG_WITH(default_parser,
     [AS_HELP_STRING([--with-default-parser=PARSER],
-                    [Deprecated. Use --with-default-tokenizer=TOKENIZER instead.
-		     specify the default fulltext parser like
+                    [specify the default fulltext parser like
                      --with-default-parser=TokenMecab.
                      (default: TokenBigram)])],
     [default_parser=$withval],
     [default_parser=no])
 if test x"$default_parser" != x"no"; then
-  AC_DEFINE_UNQUOTED(MRN_TOKENIZER_DEFAULT,
+  AC_DEFINE_UNQUOTED(MRN_PARSER_DEFAULT,
 		     "$default_parser",
-		     "specified the default tokenizer for fulltext index")
+		     "specified default fulltext parser")
+  MRN_DEFAULT_PARSER=$default_parser
+else
+  MRN_DEFAULT_PARSER=TokenBigram
 fi
-
-AC_ARG_WITH(default_tokenizer,
-    [AS_HELP_STRING([--with-default-tokenizer=TOKENIZER],
-                    [specify the default tokenizer for fulltext index like
-                     --with-default-tokenizer=TokenMecab.
-                     (default: TokenBigram)])],
-    [default_tokenizer=$withval],
-    [default_tokenizer=no])
-if test x"$default_tokenizer" != x"no"; then
-  AC_DEFINE_UNQUOTED(MRN_DEFAULT_TOKENIZER,
-		     "$default_tokenizer",
-		     "specified the default tokenizer for fulltext index")
-fi
+AC_SUBST(MRN_DEFAULT_PARSER)
 
 AC_ARG_ENABLE(fast_mutexes,
     [AS_HELP_STRING([--disable-fast-mutexes],

@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Testing of the basic functions of a MARIA table */
 
@@ -309,7 +309,7 @@ static int run_test(const char *filename)
     }
 
     /* Read through all rows and update them */
-    maria_scan_init(file);
+    assert(maria_scan_init(file) == 0);
 
     found=0;
     while ((error= maria_scan(file,read_record)) == 0)

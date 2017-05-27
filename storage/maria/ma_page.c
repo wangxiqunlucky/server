@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   Read and write key blocks
@@ -219,8 +219,13 @@ my_bool _ma_write_keypage(MARIA_PAGE *page, enum pagecache_page_lock lock,
   /* Verify that keynr is correct */
   DBUG_ASSERT(_ma_get_keynr(share, buff) == page->keyinfo->key_nr);
 
-#if defined(EXTRA_DEBUG) && defined(HAVE_valgrind) && defined(WHEN_DEBUGGING)
-  MEM_CHECK_DEFINED(buff, block_size);
+#if defined(EXTRA_DEBUG) && defined(HAVE_valgrind) && defined(NOT_ANYMORE)
+  {
+    /* This is here to catch uninitialized bytes */
+    uint length= page->size;
+    ulong crc= my_checksum(0, buff, length);
+    int4store(buff + block_size - KEYPAGE_CHECKSUM_SIZE, crc);
+  }
 #endif
 
   page_cleanup(share, page);

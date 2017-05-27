@@ -21,7 +21,6 @@
 #include "my_global.h"
 #include "sql_const.h"
 #include "pfs_server.h"
-#include "set_var.h"
 
 #include <algorithm>
 using std::min;
@@ -207,8 +206,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
   {
     count= handle;
 
-    SYSVAR_AUTOSIZE(p->m_table_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_table_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 
   if (p->m_table_share_sizing < 0)
@@ -216,74 +214,62 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
     count= share;
 
     count= max<ulong>(count, h->m_min_number_of_tables);
-    SYSVAR_AUTOSIZE(p->m_table_share_sizing,
-                    apply_load_factor(count, h->m_load_factor_static));
+    p->m_table_share_sizing= apply_load_factor(count, h->m_load_factor_static);
   }
 
   if (p->m_account_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_account_sizing,
-                    h->m_account_sizing);
+    p->m_account_sizing= h->m_account_sizing;
   }
 
   if (p->m_user_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_user_sizing,
-                    h->m_user_sizing);
+    p->m_user_sizing= h->m_user_sizing;
   }
 
   if (p->m_host_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_host_sizing,
-                    h->m_host_sizing);
+    p->m_host_sizing= h->m_host_sizing;
   }
 
   if (p->m_events_waits_history_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_waits_history_sizing,
-                    h->m_events_waits_history_sizing);
+    p->m_events_waits_history_sizing= h->m_events_waits_history_sizing;
   }
 
   if (p->m_events_waits_history_long_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_waits_history_long_sizing,
-                    h->m_events_waits_history_long_sizing);
+    p->m_events_waits_history_long_sizing= h->m_events_waits_history_long_sizing;
   }
 
   if (p->m_events_stages_history_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_stages_history_sizing,
-                    h->m_events_stages_history_sizing);
+    p->m_events_stages_history_sizing= h->m_events_stages_history_sizing;
   }
 
   if (p->m_events_stages_history_long_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_stages_history_long_sizing,
-                    h->m_events_stages_history_long_sizing);
+    p->m_events_stages_history_long_sizing= h->m_events_stages_history_long_sizing;
   }
 
   if (p->m_events_statements_history_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_statements_history_sizing,
-                    h->m_events_statements_history_sizing);
+    p->m_events_statements_history_sizing= h->m_events_statements_history_sizing;
   }
 
   if (p->m_events_statements_history_long_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_events_statements_history_long_sizing,
-                    h->m_events_statements_history_long_sizing);
+    p->m_events_statements_history_long_sizing= h->m_events_statements_history_long_sizing;
   }
 
   if (p->m_digest_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_digest_sizing,
-                    h->m_digest_sizing);
+    p->m_digest_sizing= h->m_digest_sizing;
   }
 
   if (p->m_session_connect_attrs_sizing < 0)
   {
-    SYSVAR_AUTOSIZE(p->m_session_connect_attrs_sizing,
-                    h->m_session_connect_attrs_sizing);
+    p->m_session_connect_attrs_sizing= h->m_session_connect_attrs_sizing;
   }
 
   if (p->m_mutex_sizing < 0)
@@ -293,8 +279,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + handle * mutex_per_handle
       + share * mutex_per_share;
 
-    SYSVAR_AUTOSIZE(p->m_mutex_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_mutex_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 
   if (p->m_rwlock_sizing < 0)
@@ -304,8 +289,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + handle * rwlock_per_handle
       + share * rwlock_per_share;
 
-    SYSVAR_AUTOSIZE(p->m_rwlock_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_rwlock_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 
   if (p->m_cond_sizing < 0)
@@ -316,8 +300,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + handle * cond_per_handle
       + share * cond_per_share;
 
-    SYSVAR_AUTOSIZE(p->m_cond_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_cond_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 
   if (p->m_file_sizing < 0)
@@ -328,8 +311,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + share * file_per_share;
 
     count= max<ulong>(count, file);
-    SYSVAR_AUTOSIZE(p->m_file_sizing,
-                    apply_load_factor(count, h->m_load_factor_normal));
+    p->m_file_sizing= apply_load_factor(count, h->m_load_factor_normal);
   }
 
   if (p->m_socket_sizing < 0)
@@ -339,8 +321,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + handle * socket_per_handle
       + share * socket_per_share;
 
-    SYSVAR_AUTOSIZE(p->m_socket_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_socket_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 
   if (p->m_thread_sizing < 0)
@@ -350,8 +331,7 @@ static void apply_heuristic(PFS_global_param *p, PFS_sizing_data *h)
       + handle * thread_per_handle
       + share * thread_per_share;
 
-    SYSVAR_AUTOSIZE(p->m_thread_sizing,
-                    apply_load_factor(count, h->m_load_factor_volatile));
+    p->m_thread_sizing= apply_load_factor(count, h->m_load_factor_volatile);
   }
 }
 

@@ -20,11 +20,10 @@
 #ifndef MRN_CONDITION_CONVERTER_HPP_
 #define MRN_CONDITION_CONVERTER_HPP_
 
+#include <groonga.h>
 #include <mrn_mysql_compat.h>
 
 #include <item_cmpfunc.h>
-
-#include <groonga.h>
 
 namespace mrn {
   class ConditionConverter {

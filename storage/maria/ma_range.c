@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   Gives a approximated number of how many records there is between two keys.
@@ -209,13 +209,14 @@ static double _ma_search_pos(MARIA_HA *info, MARIA_KEY *key,
 			     uint32 nextflag, my_off_t pos)
 {
   int flag;
-  uint keynr, UNINIT_VAR(max_keynr);
+  uint keynr, max_keynr;
   my_bool after_key;
   uchar *keypos;
   double offset;
   MARIA_KEYDEF *keyinfo= key->keyinfo;
   MARIA_PAGE page;
   DBUG_ENTER("_ma_search_pos");
+  LINT_INIT(max_keynr);
 
   if (pos == HA_OFFSET_ERROR)
     DBUG_RETURN(0.0);

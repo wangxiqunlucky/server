@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2016, Monty Program Ab.
+   Copyright (c) 2009, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -33,7 +33,7 @@
   And many others
 */
 
-#define MTEST_VERSION "3.5"
+#define MTEST_VERSION "3.4"
 
 #include "client_priv.h"
 #include <mysql_version.h>
@@ -1062,7 +1062,7 @@ void do_eval(DYNAMIC_STRING *query_eval, const char *query,
 	if (!(v= var_get(p, &p, 0, 0)))
         {
           report_or_die( "Bad variable in eval");
-          return;
+          DBUG_VOID_RETURN;
         }
 	dynstr_append_mem(query_eval, v->str_val, v->str_val_len);
       }
@@ -1721,13 +1721,12 @@ void log_msg(const char *fmt, ...)
 int cat_file(DYNAMIC_STRING* ds, const char* filename)
 {
   int fd;
-  size_t len;
+  int len;
   char buff[16384];
 
   if ((fd= my_open(filename, O_RDONLY, MYF(0))) < 0)
     return 1;
-  while((len= my_read(fd, (uchar*)&buff,
-                      sizeof(buff)-1, MYF(0))) > 0)
+  while((len= (int)my_read(fd, (uchar*)&buff, sizeof(buff)-1, MYF(0))) > 0)
   {
     char *p= buff, *start= buff,*end=buff+len;
     while (p < end)
@@ -1777,7 +1776,7 @@ static int run_command(char* cmd,
   if (!(res_file= popen(cmd, "r")))
   {
     report_or_die("popen(\"%s\", \"r\") failed", cmd);
-    return -1;
+    DBUG_RETURN(-1);
   }
 
   while (fgets(buf, sizeof(buf), res_file))
@@ -2490,7 +2489,7 @@ VAR *var_obtain(const char *name, int len)
 
 
 /*
-  - if variable starts with a $ it is regarded as a local test variable
+  - if variable starts with a $ it is regarded as a local test varable
   - if not it is treated as a environment variable, and the corresponding
   environment variable will be updated
 */
@@ -2634,11 +2633,12 @@ void var_query_set(VAR *var, const char *query, const char** query_end)
 {
   char *end = (char*)((query_end && *query_end) ?
 		      *query_end : query + strlen(query));
-  MYSQL_RES *UNINIT_VAR(res);
+  MYSQL_RES *res;
   MYSQL_ROW row;
   MYSQL* mysql = cur_con->mysql;
   DYNAMIC_STRING ds_query;
   DBUG_ENTER("var_query_set");
+  LINT_INIT(res);
 
   if (!mysql)
   {
@@ -2817,7 +2817,7 @@ void var_set_query_get_value(struct st_command *command, VAR *var)
 {
   long row_no;
   int col_no= -1;
-  MYSQL_RES* UNINIT_VAR(res);
+  MYSQL_RES* res;
   MYSQL* mysql= cur_con->mysql;
 
   static DYNAMIC_STRING ds_query;
@@ -2830,6 +2830,7 @@ void var_set_query_get_value(struct st_command *command, VAR *var)
   };
 
   DBUG_ENTER("var_set_query_get_value");
+  LINT_INIT(res);
 
   if (!mysql)
   {
@@ -2874,7 +2875,7 @@ void var_set_query_get_value(struct st_command *command, VAR *var)
     dynstr_free(&ds_query);
     dynstr_free(&ds_col);
     eval_expr(var, "", 0);
-    return;
+    DBUG_VOID_RETURN;
   }
 
   {
@@ -2899,7 +2900,7 @@ void var_set_query_get_value(struct st_command *command, VAR *var)
                     ds_col.str, ds_query.str);
       dynstr_free(&ds_query);
       dynstr_free(&ds_col);
-      return;
+      DBUG_VOID_RETURN;
     }
     DBUG_PRINT("info", ("Found column %d with name '%s'",
                         i, fields[i].name));
@@ -3325,7 +3326,7 @@ static int replace(DYNAMIC_STRING *ds_str,
   NOTE
   Although mysqltest is executed from cygwin shell, the command will be
   executed in "cmd.exe". Thus commands like "rm" etc can NOT be used, use
-  mysqltest command(s) like "remove_file" for that
+  mysqltest commmand(s) like "remove_file" for that
 */
 
 void do_exec(struct st_command *command)
@@ -3347,7 +3348,7 @@ void do_exec(struct st_command *command)
   if (!*cmd)
   {
     report_or_die("Missing argument in exec");
-    return;
+    DBUG_VOID_RETURN;
   }
   command->last_argument= command->end;
 
@@ -3381,7 +3382,7 @@ void do_exec(struct st_command *command)
     dynstr_free(&ds_cmd);
     if (command->abort_on_error)
       report_or_die("popen(\"%s\", \"r\") failed", command->first_argument);
-    return;
+    DBUG_VOID_RETURN;
   }
 
   ds_result= &ds_res;
@@ -3439,7 +3440,7 @@ void do_exec(struct st_command *command)
                     ds_cmd.str, error, status, errno,
                     ds_res.str);
       dynstr_free(&ds_cmd);
-      return;
+      DBUG_VOID_RETURN;
     }
 
     DBUG_PRINT("info",
@@ -3572,7 +3573,7 @@ void do_system(struct st_command *command)
   if (strlen(command->first_argument) == 0)
   {
     report_or_die("Missing arguments to system, nothing to do!");
-    return;
+    DBUG_VOID_RETURN;
   }
 
   init_dynamic_string(&ds_cmd, 0, command->query_len + 64, 256);
@@ -4559,7 +4560,7 @@ void do_perl(struct st_command *command)
       if (command->abort_on_error)
         die("popen(\"%s\", \"r\") failed", buf);
       dynstr_free(&ds_delimiter);
-      return;
+      DBUG_VOID_RETURN;
     }
 
     while (fgets(buf, sizeof(buf), res_file))
@@ -4770,6 +4771,10 @@ void do_sync_with_master(struct st_command *command)
 }
 
 
+/*
+  when ndb binlog is on, this call will wait until last updated epoch
+  (locally in the mysqld) has been received into the binlog
+*/
 int do_save_master_pos()
 {
   MYSQL_RES *res;
@@ -4778,6 +4783,144 @@ int do_save_master_pos()
   const char *query;
   DBUG_ENTER("do_save_master_pos");
 
+#ifdef HAVE_NDB_BINLOG
+  /*
+    Wait for ndb binlog to be up-to-date with all changes
+    done on the local mysql server
+  */
+  {
+    ulong have_ndbcluster;
+    if (mysql_query(mysql, query= "show variables like 'have_ndbcluster'"))
+      die("'%s' failed: %d %s", query,
+          mysql_errno(mysql), mysql_error(mysql));
+    if (!(res= mysql_store_result(mysql)))
+      die("mysql_store_result() returned NULL for '%s'", query);
+    if (!(row= mysql_fetch_row(res)))
+      die("Query '%s' returned empty result", query);
+
+    have_ndbcluster= strcmp("YES", row[1]) == 0;
+    mysql_free_result(res);
+
+    if (have_ndbcluster)
+    {
+      ulonglong start_epoch= 0, handled_epoch= 0,
+	latest_epoch=0, latest_trans_epoch=0,
+	latest_handled_binlog_epoch= 0, latest_received_binlog_epoch= 0,
+	latest_applied_binlog_epoch= 0;
+      int count= 0;
+      int do_continue= 1;
+      while (do_continue)
+      {
+        const char binlog[]= "binlog";
+	const char latest_epoch_str[]=
+          "latest_epoch=";
+        const char latest_trans_epoch_str[]=
+          "latest_trans_epoch=";
+	const char latest_received_binlog_epoch_str[]=
+	  "latest_received_binlog_epoch";
+        const char latest_handled_binlog_epoch_str[]=
+          "latest_handled_binlog_epoch=";
+        const char latest_applied_binlog_epoch_str[]=
+          "latest_applied_binlog_epoch=";
+        if (count)
+          my_sleep(100*1000); /* 100ms */
+        if (mysql_query(mysql, query= "show engine ndb status"))
+          die("failed in '%s': %d %s", query,
+              mysql_errno(mysql), mysql_error(mysql));
+        if (!(res= mysql_store_result(mysql)))
+          die("mysql_store_result() returned NULL for '%s'", query);
+        while ((row= mysql_fetch_row(res)))
+        {
+          if (strcmp(row[1], binlog) == 0)
+          {
+            const char *status= row[2];
+
+	    /* latest_epoch */
+	    while (*status && strncmp(status, latest_epoch_str,
+				      sizeof(latest_epoch_str)-1))
+	      status++;
+	    if (*status)
+            {
+	      status+= sizeof(latest_epoch_str)-1;
+	      latest_epoch= strtoull(status, (char**) 0, 10);
+	    }
+	    else
+	      die("result does not contain '%s' in '%s'",
+		  latest_epoch_str, query);
+	    /* latest_trans_epoch */
+	    while (*status && strncmp(status, latest_trans_epoch_str,
+				      sizeof(latest_trans_epoch_str)-1))
+	      status++;
+	    if (*status)
+	    {
+	      status+= sizeof(latest_trans_epoch_str)-1;
+	      latest_trans_epoch= strtoull(status, (char**) 0, 10);
+	    }
+	    else
+	      die("result does not contain '%s' in '%s'",
+		  latest_trans_epoch_str, query);
+	    /* latest_received_binlog_epoch */
+	    while (*status &&
+		   strncmp(status, latest_received_binlog_epoch_str,
+			   sizeof(latest_received_binlog_epoch_str)-1))
+	      status++;
+	    if (*status)
+	    {
+	      status+= sizeof(latest_received_binlog_epoch_str)-1;
+	      latest_received_binlog_epoch= strtoull(status, (char**) 0, 10);
+	    }
+	    else
+	      die("result does not contain '%s' in '%s'",
+		  latest_received_binlog_epoch_str, query);
+	    /* latest_handled_binlog */
+	    while (*status &&
+		   strncmp(status, latest_handled_binlog_epoch_str,
+			   sizeof(latest_handled_binlog_epoch_str)-1))
+	      status++;
+	    if (*status)
+	    {
+	      status+= sizeof(latest_handled_binlog_epoch_str)-1;
+	      latest_handled_binlog_epoch= strtoull(status, (char**) 0, 10);
+	    }
+	    else
+	      die("result does not contain '%s' in '%s'",
+		  latest_handled_binlog_epoch_str, query);
+	    /* latest_applied_binlog_epoch */
+	    while (*status &&
+		   strncmp(status, latest_applied_binlog_epoch_str,
+			   sizeof(latest_applied_binlog_epoch_str)-1))
+	      status++;
+	    if (*status)
+	    {
+	      status+= sizeof(latest_applied_binlog_epoch_str)-1;
+	      latest_applied_binlog_epoch= strtoull(status, (char**) 0, 10);
+	    }
+	    else
+	      die("result does not contain '%s' in '%s'",
+		  latest_applied_binlog_epoch_str, query);
+	    if (count == 0)
+	      start_epoch= latest_trans_epoch;
+	    break;
+	  }
+	}
+	if (!row)
+	  die("result does not contain '%s' in '%s'",
+	      binlog, query);
+	if (latest_handled_binlog_epoch > handled_epoch)
+	  count= 0;
+	handled_epoch= latest_handled_binlog_epoch;
+	count++;
+	if (latest_handled_binlog_epoch >= start_epoch)
+          do_continue= 0;
+        else if (count > 300) /* 30s */
+	{
+	  break;
+        }
+        mysql_free_result(res);
+      }
+    }
+  }
+#endif
   if (mysql_query(mysql, query= "show master status"))
     die("failed in 'show master status': %d %s",
 	mysql_errno(mysql), mysql_error(mysql));
@@ -5028,7 +5171,7 @@ static int my_kill(int pid, int sig)
 
 void do_shutdown_server(struct st_command *command)
 {
-  long timeout= opt_wait_for_pos_timeout ? opt_wait_for_pos_timeout / 5 : 300;
+  long timeout=60;
   int pid;
   DYNAMIC_STRING ds_pidfile_name;
   MYSQL* mysql = cur_con->mysql;
@@ -5097,6 +5240,7 @@ void do_shutdown_server(struct st_command *command)
   (void)my_kill(pid, 9);
 
   DBUG_VOID_RETURN;
+
 }
 
 
@@ -6554,7 +6698,7 @@ int read_line(char *buf, int size)
                               start_lineno));
         }
 
-        /* Skip all space at beginning of line */
+        /* Skip all space at begining of line */
 	skip_char= 1;
       }
       else if (end_of_query(c))
@@ -6566,10 +6710,10 @@ int read_line(char *buf, int size)
       }
       else if (c == '}')
       {
-        /* A "}" need to be by itself in the beginning of a line to terminate */
+        /* A "}" need to be by itself in the begining of a line to terminate */
         *p++= c;
 	*p= 0;
-        DBUG_PRINT("exit", ("Found '}' in beginning of a line at line: %d",
+        DBUG_PRINT("exit", ("Found '}' in begining of a line at line: %d",
                             cur_file->lineno));
 	DBUG_RETURN(0);
       }
@@ -7931,7 +8075,7 @@ void handle_error(struct st_command *command,
   {
     /*
       The query after a "--require" failed. This is fine as long the server
-      returned a valid response. Don't allow 2013 or 2006 to trigger an
+      returned a valid reponse. Don't allow 2013 or 2006 to trigger an
       abort_not_supported_test
     */
     if (err_errno == CR_SERVER_LOST ||
@@ -9012,7 +9156,7 @@ int main(int argc, char **argv)
   var_set_string("MYSQLTEST_FILE", cur_file->file_name);
   init_re();
 
-  /* Cursor protocol implies ps protocol */
+  /* Cursor protcol implies ps protocol */
   if (cursor_protocol)
     ps_protocol= 1;
 
@@ -9110,7 +9254,7 @@ int main(int argc, char **argv)
                               abort_on_error);
     
     /*
-      some commands need to be executed or at least parsed unconditionally,
+      some commmands need to be executed or at least parsed unconditionally,
       because they change the grammar.
     */
     ok_to_do= cur_block->ok || command->type == Q_DELIMITER
@@ -9542,7 +9686,7 @@ int main(int argc, char **argv)
     die("Test ended with parsing disabled");
 
   /*
-    The whole test has been executed _successfully_.
+    The whole test has been executed _sucessfully_.
     Time to compare result or save it to record file.
     The entire output from test is in the log file
   */
@@ -9588,7 +9732,7 @@ int main(int argc, char **argv)
 
   verbose_msg("Test has succeeded!");
   timer_output();
-  /* Yes, if we got this far the test has succeeded! Sakila smiles */
+  /* Yes, if we got this far the test has suceeded! Sakila smiles */
   cleanup_and_exit(0);
   return 0; /* Keep compiler happy too */
 }
@@ -10083,7 +10227,7 @@ void free_replace_regex()
   buf_len_p - result buffer length. Will change if the buffer is reallocated
   pattern - regexp pattern to match
   replace - replacement expression
-  string - the string to perform substitutions in
+  string - the string to perform substituions in
   icase - flag, if set to 1 the match is case insensitive
 */
 int reg_replace(char** buf_p, int* buf_len_p, char *pattern,
@@ -10132,7 +10276,7 @@ int reg_replace(char** buf_p, int* buf_len_p, char *pattern,
   {
     /* find the match */
     err_code= regexec(&r,str_p, r.re_nsub+1, subs,
-                         (str_p == string) ? 0 : REG_NOTBOL);
+                         (str_p == string) ? REG_NOTBOL : 0);
 
     /* if regular expression error (eg. bad syntax, or out of memory) */
     if (err_code && err_code != REG_NOMATCH)

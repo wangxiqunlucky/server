@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2011, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -106,7 +106,11 @@ void test_timers()
 
 void do_all_tests()
 {
+  PFS_atomic::init();
+
   test_timers();
+
+  PFS_atomic::cleanup();
 }
 
 int main(int, char **)
@@ -115,6 +119,6 @@ int main(int, char **)
   MY_INIT("pfs_timer-t");
   do_all_tests();
   my_end(0);
-  return exit_status();
+  return (exit_status());
 }
 

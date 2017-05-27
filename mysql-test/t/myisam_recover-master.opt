@@ -1,1 +1,1 @@
---myisam-recover-options=force
+--myisam-recover=force

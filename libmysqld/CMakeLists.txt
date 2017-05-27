@@ -26,6 +26,7 @@ ${PCRE_INCLUDES}
 ${ZLIB_INCLUDE_DIR}
 ${SSL_INCLUDE_DIRS}
 ${SSL_INTERNAL_INCLUDE_DIRS}
+${CMAKE_SOURCE_DIR}/sql/backup
 )
 
 SET(GEN_SOURCES
@@ -56,7 +57,7 @@ SET(SQL_EMBEDDED_SOURCES emb_qcache.cc libmysqld.c lib_sql.cc
            ../sql/net_serv.cc ../sql/opt_range.cc ../sql/opt_sum.cc 
            ../sql/parse_file.cc ../sql/procedure.cc ../sql/protocol.cc 
            ../sql/records.cc ../sql/repl_failsafe.cc ../sql/rpl_filter.cc
-           ../sql/rpl_record.cc ../sql/des_key_file.cc
+           ../sql/rpl_record.cc ../sql/sha2.cc ../sql/des_key_file.cc
            ../sql/rpl_injector.cc ../sql/set_var.cc ../sql/spatial.cc 
            ../sql/sp_cache.cc ../sql/sp.cc ../sql/sp_head.cc 
            ../sql/sp_pcontext.cc ../sql/sp_rcontext.cc ../sql/sql_acl.cc 
@@ -75,7 +76,6 @@ SET(SQL_EMBEDDED_SOURCES emb_qcache.cc libmysqld.c lib_sql.cc
            ../sql/debug_sync.cc ../sql/opt_table_elimination.cc
            ../sql/sql_prepare.cc ../sql/sql_rename.cc ../sql/sql_repl.cc 
            ../sql/sql_select.cc ../sql/sql_servers.cc
-           ../sql/group_by_handler.cc
            ../sql/sql_show.cc ../sql/sql_state.c 
            ../sql/sql_statistics.cc ../sql/sql_string.cc
            ../sql/sql_tablespace.cc ../sql/sql_table.cc ../sql/sql_test.cc
@@ -100,15 +100,11 @@ SET(SQL_EMBEDDED_SOURCES emb_qcache.cc libmysqld.c lib_sql.cc
            ../sql/rpl_reporting.cc
            ../sql/sql_expression_cache.cc
            ../sql/my_apc.cc ../sql/my_apc.h
-           ../sql/my_json_writer.cc ../sql/my_json_writer.h
 	   ../sql/rpl_gtid.cc
            ../sql/sql_explain.cc ../sql/sql_explain.h
-           ../sql/sql_analyze_stmt.cc ../sql/sql_analyze_stmt.h
            ../sql/compat56.cc
-           ../sql/sql_type.cc ../sql/sql_type.h
-           ../sql/table_cache.cc ../sql/mf_iocache_encr.cc
+           ../sql/table_cache.cc
            ../sql/item_inetfunc.cc
-           ../sql/wsrep_dummy.cc ../sql/encryption.cc
            ${GEN_SOURCES}
            ${MYSYS_LIBWRAP_SOURCE}
 )

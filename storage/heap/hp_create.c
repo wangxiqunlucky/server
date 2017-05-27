@@ -1,5 +1,5 @@
 /* Copyright (c) 2000, 2011, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2014, SkySQL Ab.
+   Copyright (c) 2010, 2017, MariaDB Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -94,7 +94,7 @@ int heap_create(const char *name, HP_CREATE_INFO *create_info,
         case HA_KEYTYPE_VARBINARY1:
           /* Case-insensitiveness is handled in coll->hash_sort */
           keyinfo->seg[j].type= HA_KEYTYPE_VARTEXT1;
-          /* fall_through */
+          /* fall through */
         case HA_KEYTYPE_VARTEXT1:
           keyinfo->flag|= HA_VAR_LENGTH_KEY;
           length+= 2;
@@ -211,12 +211,11 @@ int heap_create(const char *name, HP_CREATE_INFO *create_info,
       my_free(share);
       goto err;
     }
-
+    thr_lock_init(&share->lock);
+    mysql_mutex_init(hp_key_mutex_HP_SHARE_intern_lock,
+                     &share->intern_lock, MY_MUTEX_INIT_FAST);
     if (!create_info->internal_table)
     {
-      thr_lock_init(&share->lock);
-      mysql_mutex_init(hp_key_mutex_HP_SHARE_intern_lock,
-                       &share->intern_lock, MY_MUTEX_INIT_FAST);
       share->open_list.data= (void*) share;
       heap_share_list= list_add(heap_share_list,&share->open_list);
     }
@@ -341,13 +340,11 @@ void heap_drop_table(HP_INFO *info)
 
 void hp_free(HP_SHARE *share)
 {
-  if (!share->internal)
-  {
+  if (share->open_list.data)                    /* If not internal table */
     heap_share_list= list_delete(heap_share_list, &share->open_list);
-    thr_lock_delete(&share->lock);
-    mysql_mutex_destroy(&share->intern_lock);
-  }
   hp_clear(share);			/* Remove blocks from memory */
+  thr_lock_delete(&share->lock);
+  mysql_mutex_destroy(&share->intern_lock);
   my_free(share->name);
   my_free(share);
   return;

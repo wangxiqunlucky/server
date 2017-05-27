@@ -2,6 +2,7 @@
 
 Copyright (c) 2005, 2016, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
+Copyright (c) 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -68,8 +69,8 @@ using namespace std;
 # define buf_LRU_stat_inc_unzip()			((void) 0)
 #endif /* !UNIV_HOTBACKUP */
 
-#ifndef UNIV_HOTBACKUP
 #ifndef UNIV_INNOCHECKSUM
+#ifndef UNIV_HOTBACKUP
 /** Statistics on compression, indexed by page_zip_des_t::ssize - 1 */
 UNIV_INTERN page_zip_stat_t		page_zip_stat[PAGE_ZIP_SSIZE_MAX];
 /** Statistics on compression, indexed by index->id */
@@ -79,7 +80,6 @@ UNIV_INTERN ib_mutex_t			page_zip_stat_per_index_mutex;
 #ifdef HAVE_PSI_INTERFACE
 UNIV_INTERN mysql_pfs_key_t		page_zip_stat_per_index_mutex_key;
 #endif /* HAVE_PSI_INTERFACE */
-#endif /* !UNIV_INNOCHECKSUM */
 #endif /* !UNIV_HOTBACKUP */
 
 /* Compression level to be used by zlib. Settable by user. */
@@ -87,7 +87,7 @@ UNIV_INTERN uint	page_zip_level = DEFAULT_COMPRESSION_LEVEL;
 
 /* Whether or not to log compressed page images to avoid possible
 compression algorithm changes in zlib. */
-UNIV_INTERN my_bool	page_zip_log_pages = false;
+UNIV_INTERN my_bool	page_zip_log_pages = true;
 
 /* Please refer to ../include/page0zip.ic for a description of the
 compressed page format. */
@@ -128,7 +128,6 @@ Compare at most sizeof(field_ref_zero) bytes.
 
 /* Enable some extra debugging output.  This code can be enabled
 independently of any UNIV_ debugging conditions. */
-#ifndef UNIV_INNOCHECKSUM
 #if defined UNIV_DEBUG || defined UNIV_ZIP_DEBUG
 # include <stdarg.h>
 MY_ATTRIBUTE((format (printf, 1, 2)))
@@ -672,8 +671,8 @@ page_zip_dir_encode(
 #if PAGE_ZIP_DIR_SLOT_MASK & (PAGE_ZIP_DIR_SLOT_MASK + 1)
 # error "PAGE_ZIP_DIR_SLOT_MASK is not 1 less than a power of 2"
 #endif
-#if PAGE_ZIP_DIR_SLOT_MASK < UNIV_PAGE_ZIP_SIZE_MAX - 1
-# error "PAGE_ZIP_DIR_SLOT_MASK < UNIV_ZIP_SIZE_MAX - 1"
+#if PAGE_ZIP_DIR_SLOT_MASK < UNIV_PAGE_SIZE_MAX - 1
+# error "PAGE_ZIP_DIR_SLOT_MASK < UNIV_PAGE_SIZE_MAX - 1"
 #endif
 		if (UNIV_UNLIKELY(rec_get_n_owned_new(rec))) {
 			offs |= PAGE_ZIP_DIR_SLOT_OWNED;
@@ -925,7 +924,7 @@ page_zip_compress_sec(
 			rec - REC_N_NEW_EXTRA_BYTES
 			- c_stream->next_in);
 
-		if (UNIV_LIKELY(c_stream->avail_in != 0)) {
+		if (UNIV_LIKELY(c_stream->avail_in)) {
 			UNIV_MEM_ASSERT_RW(c_stream->next_in,
 					   c_stream->avail_in);
 			err = deflate(c_stream, Z_NO_FLUSH);
@@ -1020,7 +1019,7 @@ page_zip_compress_clust_ext(
 
 			c_stream->avail_in = static_cast<uInt>(
 				src - c_stream->next_in);
-			if (UNIV_LIKELY(c_stream->avail_in != 0)) {
+			if (UNIV_LIKELY(c_stream->avail_in)) {
 				err = deflate(c_stream, Z_NO_FLUSH);
 				if (UNIV_UNLIKELY(err != Z_OK)) {
 

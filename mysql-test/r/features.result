@@ -1,5 +1,4 @@
 drop table if exists t1;
-set sql_mode="";
 flush status;
 show status like "feature%";
 Variable_name	Value

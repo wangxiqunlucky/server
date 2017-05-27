@@ -33,7 +33,6 @@ namespace mrn {
     ~SmartGrnObj();
 
     grn_obj *get();
-    grn_obj *release();
   };
 }
 

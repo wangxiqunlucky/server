@@ -24,16 +24,6 @@ select a, (select d from t2 where b=c) from t1;
 show status like "subquery_cache%";
 show status like '%Handler_read%';
 
---source include/analyze-format.inc
-analyze format=json
-select a, (select d from t2 where b=c) from t1;
---source include/analyze-format.inc
-analyze format=json
-select a, (select d from t2 where b=c), (select d from t2 where b=c union select 1 order by 1 limit 1) from t1;
-explain format=json
-select a, (select d from t2 where b=c) from t1;
-explain format=json
-select a, (select d from t2 where b=c), (select d from t2 where b=c union select 1 order by 1 limit 1) from t1;
 set optimizer_switch='subquery_cache=off';
 flush status;
 

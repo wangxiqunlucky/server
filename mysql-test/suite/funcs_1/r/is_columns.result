@@ -97,9 +97,6 @@ COLUMN_COMMENT	varchar(1024)	NO
 SELECT table_catalog, table_schema, table_name, column_name
 FROM information_schema.columns WHERE table_catalog IS NULL OR table_catalog <> 'def';
 table_catalog	table_schema	table_name	column_name
-Warnings:
-Warning	1286	Unknown storage engine 'InnoDB'
-Warning	1286	Unknown storage engine 'InnoDB'
 ###############################################################################
 # Testcase 3.2.6.2 + 3.2.6.3: INFORMATION_SCHEMA.COLUMNS accessible information
 ###############################################################################
@@ -128,10 +125,10 @@ def	db_datadict	t1	f1	1	NULL	YES	char	10	10	NULL	NULL	NULL	latin1	latin1_swedish
 def	db_datadict	t1	f2	2	NULL	YES	text	65535	65535	NULL	NULL	NULL	latin1	latin1_swedish_ci	text			select,insert,update,references	
 def	db_datadict	t1	f3	3	NULL	YES	date	NULL	NULL	NULL	NULL	NULL	NULL	NULL	date			select,insert,update,references	
 def	db_datadict	t1	f4	4	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)	PRI	auto_increment	select,insert,update,references	
-def	db_datadict	t2	f1	1	NULL	NO	char	10	10	NULL	NULL	NULL	latin1	latin1_swedish_ci	char(10)	PRI		select,insert,update,references	
+def	db_datadict	t2	f1	1		NO	char	10	10	NULL	NULL	NULL	latin1	latin1_swedish_ci	char(10)	PRI		select,insert,update,references	
 def	db_datadict	t2	f2	2	NULL	YES	text	65535	65535	NULL	NULL	NULL	latin1	latin1_swedish_ci	text			select,insert,update,references	
 def	db_datadict	t2	f3	3	NULL	YES	date	NULL	NULL	NULL	NULL	NULL	NULL	NULL	date			select,insert,update,references	
-def	db_datadict	t2	f4	4	NULL	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)	PRI		select,insert,update,references	
+def	db_datadict	t2	f4	4	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(11)	PRI		select,insert,update,references	
 def	db_datadict	v1	f1	1	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(1)			select,insert,update,references	
 def	db_datadict	v1	f2	2	0	NO	int	NULL	NULL	10	0	NULL	NULL	NULL	int(1)			select,insert,update,references	
 SHOW COLUMNS FROM db_datadict.t1;
@@ -142,10 +139,10 @@ f3	date	YES		NULL
 f4	int(11)	NO	PRI	NULL	auto_increment
 SHOW COLUMNS FROM db_datadict.t2;
 Field	Type	Null	Key	Default	Extra
-f1	char(10)	NO	PRI	NULL	
+f1	char(10)	NO	PRI		
 f2	text	YES		NULL	
 f3	date	YES		NULL	
-f4	int(11)	NO	PRI	NULL	
+f4	int(11)	NO	PRI	0	
 SHOW COLUMNS FROM db_datadict.v1;
 Field	Type	Null	Key	Default	Extra
 f1	int(1)	NO		0	
@@ -172,13 +169,13 @@ SELECT * FROM information_schema.columns
 WHERE table_schema = 'db_datadict'
 ORDER BY table_schema, table_name, ordinal_position;
 TABLE_CATALOG	TABLE_SCHEMA	TABLE_NAME	COLUMN_NAME	ORDINAL_POSITION	COLUMN_DEFAULT	IS_NULLABLE	DATA_TYPE	CHARACTER_MAXIMUM_LENGTH	CHARACTER_OCTET_LENGTH	NUMERIC_PRECISION	NUMERIC_SCALE	DATETIME_PRECISION	CHARACTER_SET_NAME	COLLATION_NAME	COLUMN_TYPE	COLUMN_KEY	EXTRA	PRIVILEGES	COLUMN_COMMENT
-def	db_datadict	t2	f1	1	NULL	NO	char	10	10	NULL	NULL	NULL	latin1	latin1_swedish_ci	char(10)	PRI		insert	
+def	db_datadict	t2	f1	1		NO	char	10	10	NULL	NULL	NULL	latin1	latin1_swedish_ci	char(10)	PRI		insert	
 def	db_datadict	t2	f2	2	NULL	YES	text	65535	65535	NULL	NULL	NULL	latin1	latin1_swedish_ci	text			insert	
 SHOW COLUMNS FROM db_datadict.t1;
 ERROR 42000: SELECT command denied to user 'testuser2'@'localhost' for table 't1'
 SHOW COLUMNS FROM db_datadict.t2;
 Field	Type	Null	Key	Default	Extra
-f1	char(10)	NO	PRI	NULL	
+f1	char(10)	NO	PRI		
 f2	text	YES		NULL	
 SHOW COLUMNS FROM db_datadict.v1;
 ERROR 42000: SELECT command denied to user 'testuser2'@'localhost' for table 'v1'

@@ -1111,7 +1111,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
 1	PRIMARY	t3	system	NULL	NULL	NULL	NULL	1	100.00	
 2	SUBQUERY	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	No tables used
 Warnings:
-Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where 1
+Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where (not(<expr_cache><6,5>(<in_optimizer>((6,5),<exists>(select 7,5 having (trigcond(((<cache>(6) = 7) or isnull(7))) and trigcond(((<cache>(5) = 5) or isnull(5))) and trigcond(<is_not_null_test>(7)) and trigcond(<is_not_null_test>(5))))))))
 SELECT t.a,t.b FROM t3 RIGHT JOIN ((SELECT * FROM t1) AS t, t2) ON t2.b != 0 
 WHERE (t.a,t.b) NOT IN (SELECT 7, 5);
 a	b
@@ -1125,7 +1125,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
 1	PRIMARY	t3	system	NULL	NULL	NULL	NULL	1	100.00	
 3	SUBQUERY	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	No tables used
 Warnings:
-Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where 1
+Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where (not(<expr_cache><6,5>(<in_optimizer>((6,5),<exists>(select 7,5 having (trigcond(((<cache>(6) = 7) or isnull(7))) and trigcond(((<cache>(5) = 5) or isnull(5))) and trigcond(<is_not_null_test>(7)) and trigcond(<is_not_null_test>(5))))))))
 SELECT t.a,t.b FROM t3 RIGHT JOIN (v1 AS t, t2) ON t2.b != 0 
 WHERE (t.a,t.b) NOT IN (SELECT 7, 5);
 a	b
@@ -1139,7 +1139,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
 1	PRIMARY	t3	system	NULL	NULL	NULL	NULL	1	100.00	
 2	SUBQUERY	NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL	No tables used
 Warnings:
-Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where 1
+Note	1003	select 6 AS `a`,5 AS `b` from `test`.`t3` where (not(<expr_cache><6,5>(<in_optimizer>((6,5),<exists>(select 7,5 having (trigcond(((<cache>(6) = 7) or isnull(7))) and trigcond(((<cache>(5) = 5) or isnull(5))) and trigcond(<is_not_null_test>(7)) and trigcond(<is_not_null_test>(5))))))))
 DROP VIEW v1;
 DROP TABLE t1,t2,t3;
 #
@@ -1979,11 +1979,6 @@ GROUP BY TABLE_SCHEMA) AS UNIQUES
 ON ( COLUMNS.TABLE_SCHEMA = UNIQUES.TABLE_SCHEMA);
 COUNT(*) > 0
 1
-Warnings:
-Warning	1286	Unknown storage engine 'InnoDB'
-Warning	1286	Unknown storage engine 'InnoDB'
-Warning	1286	Unknown storage engine 'InnoDB'
-Warning	1286	Unknown storage engine 'InnoDB'
 DROP TABLE t1;
 SET SESSION optimizer_switch= @save_optimizer_switch;
 #
@@ -2277,7 +2272,10 @@ CREATE TABLE IF NOT EXISTS `galleries` (
 `year` int(11) DEFAULT NULL, 
 PRIMARY KEY (`id`), 
 UNIQUE KEY `name` (`name`) 
-) DEFAULT CHARSET=utf8;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+Warnings:
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1266	Using storage engine MyISAM for table 'galleries'
 CREATE TABLE IF NOT EXISTS `pictures` ( 
 `id` int(11) NOT NULL AUTO_INCREMENT, 
 `name` varchar(100) NOT NULL, 
@@ -2290,7 +2288,10 @@ CREATE TABLE IF NOT EXISTS `pictures` (
 `type` int(11) NOT NULL, 
 PRIMARY KEY (`id`), 
 KEY `gallery_id` (`gallery_id`) 
-) DEFAULT CHARSET=utf8 ;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 ;
+Warnings:
+Warning	1286	Unknown storage engine 'InnoDB'
+Warning	1266	Using storage engine MyISAM for table 'pictures'
 ALTER TABLE `pictures` 
 ADD CONSTRAINT `pictures_ibfk_1` FOREIGN KEY (`gallery_id`) REFERENCES `galleries` (`id`);
 INSERT INTO `galleries` (`id`, `name`, `year`) VALUES 
@@ -2590,5 +2591,64 @@ Handler_read_rnd_deleted	0
 Handler_read_rnd_next	27
 deallocate prepare stmt1;
 drop table t1,t2;
+#
+# Bug mdev-12670: mergeable derived / view with subqueries
+#                 subject to semi-join optimizations
+# (actually this is a 5.3 bug.)               
+#
+create table t1 (a int) engine=myisam;
+insert into t1  values (5),(3),(2),(7),(2),(5),(1);
+create table t2 (b int, index idx(b)) engine=myisam;
+insert into t2 values (2),(3),(2),(1),(3),(4);
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+insert into t2 select b+10 from t2;
+analyze table t1,t2;
+Table	Op	Msg_type	Msg_text
+test.t1	analyze	status	OK
+test.t2	analyze	status	OK
+explain select a from t1 where a in (select b from t2);
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	7	Using where
+1	PRIMARY	t2	ref	idx	idx	5	test.t1.a	140	Using index; FirstMatch(t1)
+explain select * from (select a from t1 where a in (select b from t2)) t;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	7	Using where
+1	PRIMARY	t2	ref	idx	idx	5	test.t1.a	140	Using index; FirstMatch(t1)
+create view v1 as select a from t1 where a in (select b from t2);
+explain select * from v1;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	7	Using where
+1	PRIMARY	t2	ref	idx	idx	5	test.t1.a	140	Using index; FirstMatch(t1)
+drop view v1;
+drop table t1,t2;
+#
+# Bug mdev-12812: mergeable derived / view with subqueries
+#                 NOT subject to semi-join optimizations
+#
+CREATE TABLE t1 (c1 varchar(3)) ENGINE=MyISAM;
+INSERT INTO t1 VALUES ('foo'),('foo');
+CREATE TABLE t2 (c2 varchar(3)) ENGINE=MyISAM;
+INSERT INTO t2 VALUES ('bar'),('qux'),('foo');
+SELECT STRAIGHT_JOIN * 
+FROM ( SELECT * FROM t1 WHERE c1 IN ( SELECT c2 FROM t2 ) ) AS sq;
+c1
+foo
+foo
+EXPLAIN EXTENDED SELECT STRAIGHT_JOIN * 
+FROM ( SELECT * FROM t1 WHERE c1 IN ( SELECT c2 FROM t2 ) ) AS sq;
+id	select_type	table	type	possible_keys	key	key_len	ref	rows	filtered	Extra
+1	PRIMARY	t1	ALL	NULL	NULL	NULL	NULL	2	100.00	Using where
+3	DEPENDENT SUBQUERY	t2	ALL	NULL	NULL	NULL	NULL	3	100.00	Using where
+Warnings:
+Note	1003	select straight_join `test`.`t1`.`c1` AS `c1` from `test`.`t1` where <in_optimizer>(`test`.`t1`.`c1`,<exists>(select `test`.`t2`.`c2` from `test`.`t2` where (<cache>(`test`.`t1`.`c1`) = `test`.`t2`.`c2`)))
+DROP TABLE t1, t2;
 set optimizer_switch=@exit_optimizer_switch;
 set join_cache_level=@exit_join_cache_level;

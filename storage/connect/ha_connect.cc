@@ -209,11 +209,8 @@ pthread_mutex_t parmut = PTHREAD_MUTEX_INITIALIZER;
 /***********************************************************************/
 PQRYRES OEMColumns(PGLOBAL g, PTOS topt, char *tab, char *db, bool info);
 PQRYRES VirColumns(PGLOBAL g, bool info);
-PQRYRES JSONColumns(PGLOBAL g, char *db, char *dsn, PTOS topt, bool info);
+PQRYRES JSONColumns(PGLOBAL g, char *db, PTOS topt, bool info);
 PQRYRES XMLColumns(PGLOBAL g, char *db, char *tab, PTOS topt, bool info);
-#if defined(MONGO_SUPPORT)
-PQRYRES MGOColumns(PGLOBAL g, char *db, PTOS topt, bool info);
-#endif   // MONGO_SUPPORT
 int     TranslateJDBCType(int stp, char *tn, int prec, int& len, char& v);
 void    PushWarning(PGLOBAL g, THD *thd, int level);
 bool    CheckSelf(PGLOBAL g, TABLE_SHARE *s, PCSZ host, PCSZ db,
@@ -678,10 +675,6 @@ static int connect_init_func(void *p)
   XmlInitParserLib();
 #endif   // LIBXML2_SUPPORT
 
-#if defined(MONGO_SUPPORT)
-	mongo_init(true);
-#endif   // MONGO_SUPPORT
-
   init_connect_psi_keys();
 
   connect_hton= (handlerton *)p;
@@ -719,10 +712,6 @@ static int connect_done_func(void *)
 #ifdef LIBXML2_SUPPORT
   XmlCleanupParserLib();
 #endif // LIBXML2_SUPPORT
-
-#if defined(MONGO_SUPPORT)
-	mongo_init(false);
-#endif   // MONGO_SUPPORT
 
 #ifdef JDBC_SUPPORT
 	JDBConn::ResetJVM();
@@ -1045,8 +1034,8 @@ PCSZ GetListOption(PGLOBAL g, PCSZ opname, PCSZ oplist, PCSZ def)
     pv= strchr(pk, '=');
 
     if (pv && (!pn || pv < pn)) {
-			n = MY_MIN(static_cast<size_t>(pv - pk), sizeof(key) - 1);
-			memcpy(key, pk, n);
+			n= MY_MIN(pv - pk, (int)sizeof(key) - 1);
+      memcpy(key, pk, n);
       key[n]= 0;
       pv++;
 			n= MY_MIN((pn ? pn - pv : strlen(pv)), sizeof(val) - 1);
@@ -1203,7 +1192,7 @@ char *ha_connect::GetRealString(PCSZ s)
 {
   char *sv;
 
-  if (IsPartitioned() && s && partname && *partname) {
+  if (IsPartitioned() && s && *partname) {
     sv= (char*)PlugSubAlloc(xp->g, NULL, 0);
     sprintf(sv, s, partname);
     PlugSubAlloc(xp->g, NULL, strlen(sv) + 1);
@@ -1438,7 +1427,7 @@ void *ha_connect::GetColumnOption(PGLOBAL g, void *field, PCOLINFO pcf)
     case MYSQL_TYPE_VARCHAR:
     case MYSQL_TYPE_VAR_STRING:
       pcf->Flags |= U_VAR;
-      /* no break */
+      /* fall through */
     default:
       pcf->Type= MYSQLtoPLG(fp->type(), &v);
       break;
@@ -2813,6 +2802,7 @@ PCFIL ha_connect::CheckCond(PGLOBAL g, PCFIL filp, const Item *cond)
 			case Item_func::LIKE_FUNC:   vop= OP_LIKE; break;
 			case Item_func::ISNOTNULL_FUNC:
 				neg = true;
+				/* fall through */
 			case Item_func::ISNULL_FUNC: vop= OP_NULL; break;
 			case Item_func::IN_FUNC:     vop= OP_IN;
       case Item_func::BETWEEN:
@@ -4257,11 +4247,11 @@ bool ha_connect::check_privileges(THD *thd, PTOS options, char *dbn, bool quick)
 			} else
         return false;
 
-      /* Fall through to check FILE_ACL */
+      /* check FILE_ACL */
+      /* fall through */
     case TAB_ODBC:
 		case TAB_JDBC:
 		case TAB_MYSQL:
-		case TAB_MONGO:
 		case TAB_DIR:
     case TAB_MAC:
     case TAB_WMI:
@@ -5487,16 +5477,16 @@ static int connect_assisted_discovery(handlerton *, THD* thd,
 				supfnc |= (FNC_DRIVER | FNC_TABLE);
 				break;
 #endif   // JDBC_SUPPORT
-			case TAB_DBF:
-				dbf = true;
-				// Passthru
-			case TAB_CSV:
-				if (!fn && fnc != FNC_NO)
-					sprintf(g->Message, "Missing %s file name", topt->type);
-				else if (sep && strlen(sep) > 1)
-					sprintf(g->Message, "Invalid separator %s", sep);
-				else
-					ok = true;
+		case TAB_DBF:
+      dbf= true;
+      // fall through
+    case TAB_CSV:
+      if (!fn && fnc != FNC_NO)
+        sprintf(g->Message, "Missing %s file name", topt->type);
+			else if (sep && strlen(sep) > 1)
+				sprintf(g->Message, "Invalid separator %s", sep);
+			else
+				ok= true;
 
 				break;
 			case TAB_MYSQL:
@@ -5569,19 +5559,12 @@ static int connect_assisted_discovery(handlerton *, THD* thd,
 			case TAB_XML:
 #endif   // LIBXML2_SUPPORT  ||         DOMDOC_SUPPORT
 			case TAB_JSON:
-				dsn = strz(g, create_info->connect_string);
-
-				if (!fn && !zfn && !mul && !dsn)
+				if (!fn && !zfn && !mul)
 					sprintf(g->Message, "Missing %s file name", topt->type);
 				else
 					ok = true;
 
 				break;
-#if defined(MONGO_SUPPORT)
-			case TAB_MONGO:
-				ok = true;
-				break;
-#endif   // MONGO_SUPPORT
 			case TAB_VIR:
 				ok = true;
 				break;
@@ -5722,13 +5705,8 @@ static int connect_assisted_discovery(handlerton *, THD* thd,
 					qrp = VirColumns(g, fnc == FNC_COL);
 					break;
 				case TAB_JSON:
-					qrp = JSONColumns(g, (char*)db, dsn, topt, fnc == FNC_COL);
+					qrp = JSONColumns(g, (char*)db, topt, fnc == FNC_COL);
 					break;
-#if defined(MONGO_SUPPORT)
-				case TAB_MONGO:
-					qrp = MGOColumns(g, (char*)db, topt, fnc == FNC_COL);
-					break;
-#endif   // MONGO_SUPPORT
 #if defined(LIBXML2_SUPPORT) || defined(DOMDOC_SUPPORT)
 				case TAB_XML:
 					qrp = XMLColumns(g, (char*)db, tab, topt, fnc == FNC_COL);

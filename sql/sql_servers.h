@@ -26,10 +26,10 @@ typedef struct st_mem_root MEM_ROOT;
 /* structs */
 typedef struct st_federated_server
 {
-  const char *server_name;
+  char *server_name;
   long port;
   uint server_name_length;
-  const char *db, *scheme, *username, *password, *socket, *owner, *host, *sport;
+  char *db, *scheme, *username, *password, *socket, *owner, *host, *sport;
 } FOREIGN_SERVER;
 
 /* cache handlers */

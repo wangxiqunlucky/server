@@ -731,7 +731,6 @@ drop table t2;
 create table t1 (a int);
 insert into t1 values (1), (2);
 create view v1 as select 5 from t1 order by 1;
-show create view v1;
 select * from v1;
 drop view v1;
 drop table t1;
@@ -2084,16 +2083,18 @@ drop table t1;
 
 # Bug#12941
 #
+--disable_warnings
 create table t1 (
   r_object_id char(16) NOT NULL,
   group_name varchar(32) NOT NULL
-);
+) engine = InnoDB;
 
 create table t2 (
   r_object_id char(16) NOT NULL,
   i_position int(11) NOT NULL,
   users_names varchar(32) default NULL
-);
+) Engine = InnoDB;
+--enable_warnings
 
 create view v1 as select r_object_id, group_name from t1;
 create view v2 as select r_object_id, i_position, users_names from t2;
@@ -2805,12 +2806,11 @@ DROP VIEW IF EXISTS v1;
 # Bug#21261 Wrong access rights was required for an insert to a view
 #
 
-set GLOBAL sql_mode="";
-set LOCAL sql_mode="";
 CREATE DATABASE bug21261DB;
 USE bug21261DB;
 connect (root,localhost,root,,bug21261DB);
 connection root;
+
 CREATE TABLE t1 (x INT);
 CREATE SQL SECURITY INVOKER VIEW v1 AS SELECT x FROM t1;
 GRANT INSERT, UPDATE ON v1 TO 'user21261'@'localhost';
@@ -2840,8 +2840,6 @@ USE test;
 disconnect root;
 disconnect user21261;
 
-set GLOBAL sql_mode=default;
-set LOCAL sql_mode=default;
 
 #
 # Bug#15950 NOW() optimized away in VIEWs
@@ -4319,23 +4317,13 @@ INSERT INTO t1 VALUES
 
 CREATE VIEW v1 AS SELECT * FROM t1;
 
---echo # t1 and v1 should return the same result set
-SELECT * FROM v1 WHERE a > 'JJ' OR a <> 0 AND a = 'VV'; 
-SELECT * FROM t1 WHERE a > 'JJ' OR a <> 0 AND a = 'VV';
---echo # t1 and v1 should propagate constants in the same way
-EXPLAIN EXTENDED
 SELECT * FROM v1 WHERE a > 'JJ' OR a <> 0 AND a = 'VV'; 
 EXPLAIN EXTENDED
-SELECT * FROM t1 WHERE a > 'JJ' OR a <> 0 AND a = 'VV';
+SELECT * FROM v1 WHERE a > 'JJ' OR a <> 0 AND a = 'VV'; 
 
---echo # t1 and v1 should return the same result set
-SELECT * FROM v1 WHERE a > 'JJ' OR a AND a = 'VV'; 
-SELECT * FROM t1 WHERE a > 'JJ' OR a AND a = 'VV';
---echo # t1 and v1 should propagate constants in the same way
-EXPLAIN EXTENDED
 SELECT * FROM v1 WHERE a > 'JJ' OR a AND a = 'VV'; 
 EXPLAIN EXTENDED
-SELECT * FROM t1 WHERE a > 'JJ' OR a AND a = 'VV';
+SELECT * FROM v1 WHERE a > 'JJ' OR a AND a = 'VV'; 
 
 DROP VIEW v1;
 DROP TABLE t1;
@@ -5787,81 +5775,46 @@ DROP VIEW v1;
 
 DROP TABLE t1;
 
+--echo #
+--echo # MDEV-8642: WHERE Clause not applied on View - Empty result set returned
+--echo #
+
+CREATE TABLE `t1` (
+  `id` int(20) NOT NULL AUTO_INCREMENT,
+  `use_case` int(11) DEFAULT NULL,
+  `current_deadline` date DEFAULT NULL,
+  `ts_create` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `id_UNIQUE` (`id`)
+) ENGINE=MyISAM AUTO_INCREMENT=13976 DEFAULT CHARSET=latin1;
+INSERT INTO `t1` VALUES (1,10,'2015-12-18','2015-08-18 08:38:16');
+INSERT INTO `t1` VALUES (2,20,'2015-10-18','2015-08-18 08:43:30');
+CREATE VIEW v1 AS SELECT
+     use_case as use_case_id,
+     (
+          SELECT 
+               deadline_sub.current_deadline
+          FROM 
+               t1 deadline_sub
+          WHERE 
+               deadline_sub.use_case = use_case_id
+               AND ts_create = (SELECT 
+                                        MIN(ts_create)
+                                   FROM 
+                                        t1 startdate_sub
+                                   WHERE 
+                                        startdate_sub.use_case = use_case_id
+                )
+     ) AS InitialDeadline
+FROM 
+     t1;
+
+SELECT * FROM v1 where use_case_id = 10;
+
+drop view v1;
+drop table t1;
 
 --echo # -----------------------------------------------------------------
 --echo # -- End of 10.0 tests.
 --echo # -----------------------------------------------------------------
 SET optimizer_switch=@save_optimizer_switch;
-
---echo #
---echo # Start of 10.1 tests
---echo #
-
---echo #
---echo # MDEV-8747 Wrong result for SELECT..WHERE derived_table_column='a' AND derived_table_column<>_latin1'A' COLLATE latin1_bin
---echo #
-CREATE TABLE t1 (a varchar(10) character set cp1251 collate cp1251_ukrainian_ci, KEY (a)) ;
-INSERT INTO t1 VALUES ('DD'), ('ZZ'), ('ZZ'), ('KK'), ('FF'), ('HH'),('MM'),('`1');
-CREATE VIEW v1 AS SELECT * FROM t1;
-SELECT * FROM t1 WHERE a <> 0 AND a = ' 1';
-SELECT * FROM v1 WHERE a <> 0 AND a = ' 1';
-DROP VIEW v1;
-DROP TABLE t1;
-
-CREATE TABLE t1 (a ENUM('5','6'));
-INSERT INTO t1 VALUES ('5'),('6');
-CREATE VIEW v1 AS SELECT * FROM t1;
-SELECT * FROM t1 WHERE a='5' AND a<2;
-SELECT * FROM v1 WHERE a='5' AND a<2;
-DROP VIEW v1;
-DROP TABLE t1;
-
---echo #
---echo # MDEV-8749 Wrong result for SELECT..WHERE derived_table_enum_column='number' AND derived_table_enum_column OP number2
---echo #
-CREATE TABLE t1 (a varchar(10) character set cp1251 collate cp1251_ukrainian_ci, KEY (a));
-INSERT INTO t1 VALUES ('DD'), ('ZZ'), ('ZZ'), ('KK'), ('FF'), ('HH'),('MM'),('`1');
-CREATE VIEW v1 AS SELECT * FROM t1;
-SELECT * FROM t1 WHERE a <> 0 AND a = ' 1';
-SELECT * FROM v1 WHERE a <> 0 AND a = ' 1';
-DROP VIEW v1;
-DROP TABLE t1;
-
-CREATE TABLE t1 (a ENUM('5','6'));
-INSERT INTO t1 VALUES ('5'),('6');
-CREATE VIEW v1 AS SELECT * FROM t1;
-SELECT * FROM t1 WHERE a='5' AND a<2;
-SELECT * FROM v1 WHERE a='5' AND a<2;
-DROP VIEW v1;
-DROP TABLE t1;
-
---echo #
---echo # MDEV-8742 Wrong result for SELECT..WHERE view_latin1_swedish_ci_field='a' COLLATE latin1_bin
---echo #
-CREATE TABLE t1 (a VARCHAR(10) CHARACTER SET latin1);
-INSERT INTO t1 VALUES ('a'),('A');
-CREATE VIEW v1 AS SELECT * FROM t1 WHERE a='a';
-SELECT * FROM v1 WHERE a=_latin1'a' COLLATE latin1_bin;
-DROP VIEW v1;
-DROP TABLE t1;
-
---echo #
---echo # MDEV-9701: CREATE VIEW with GROUP BY or ORDER BY and constant
---echo # produces invalid definition
---echo #
-CREATE TABLE t1 ( i INT );
-INSERT INTO t1 VALUES (1),(2);
-
-CREATE VIEW v1 AS
-SELECT 3 AS three, COUNT(*) FROM t1 GROUP BY three;
-
-show create view v1;
-
-SELECT * FROM v1;
-
-drop view v1;
-drop table t1;
-
---echo #
---echo # End of 10.1 tests
---echo #

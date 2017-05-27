@@ -1,5 +1,3 @@
-set GLOBAL sql_mode="";
-set LOCAL sql_mode="";
 SET NAMES binary;
 drop database if exists mysqltest;
 drop database if exists mysqltest_1;
@@ -337,7 +335,7 @@ delete from mysql.user where user like 'mysqltest\_1';
 flush privileges;
 drop database mysqltest_1;
 set password = password("changed");
-ERROR 42000: You are using MariaDB as an anonymous user and anonymous users are not allowed to modify user settings
+ERROR 42000: You are using MariaDB as an anonymous user and anonymous users are not allowed to change passwords
 lock table mysql.user write;
 flush privileges;
 grant all on *.* to 'mysqltest_1'@'localhost';
@@ -847,4 +845,3 @@ DROP USER mysqltest_u2@localhost;
 DROP USER mysqltest_u3@localhost;
 DROP USER mysqltest_u4@localhost;
 DROP USER mysqltest_u5@localhost;
-set GLOBAL sql_mode=default;

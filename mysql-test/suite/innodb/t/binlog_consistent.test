@@ -1,7 +1,6 @@
 --source include/have_innodb.inc
 --source include/have_log_bin.inc
 --source include/have_binlog_format_mixed_or_statement.inc
---source include/binlog_start_pos.inc
 
 RESET MASTER;
 
@@ -17,10 +16,7 @@ connection default;
 --echo # Connection default
 
 CREATE TABLE t1 (a INT, b VARCHAR(100), PRIMARY KEY (a,b)) ENGINE=innodb;
-let pos=`select $binlog_start_pos + 238`;
---replace_result $pos <pos>
 SHOW MASTER STATUS;
---replace_result $pos <pos>
 SHOW STATUS LIKE 'binlog_snapshot_%';
 BEGIN;
 INSERT INTO t1 VALUES (0, "");
@@ -60,11 +56,7 @@ COMMIT;
 connection default;
 --echo # Connection default
 SELECT * FROM t1 ORDER BY a,b;
-let pos=`select $binlog_start_pos + 740`;
---replace_result $pos <pos>
 SHOW STATUS LIKE 'binlog_snapshot_%';
-let pos=`select $binlog_start_pos + 1092`;
---replace_result $pos <pos>
 SHOW MASTER STATUS;
 SELECT * FROM t2 ORDER BY a;
 
@@ -85,19 +77,14 @@ FLUSH LOGS;
 connection default;
 --echo # Connection default
 SELECT * FROM t1 ORDER BY a,b;
-let pos=`select $binlog_start_pos + 740`;
---replace_result $pos <pos>
 SHOW STATUS LIKE 'binlog_snapshot_%';
-let pos=`select $binlog_start_pos + 119`;
---replace_result $pos <pos>
 SHOW MASTER STATUS;
 COMMIT;
---replace_result $pos <pos>
 SHOW STATUS LIKE 'binlog_snapshot_%';
---replace_result $pos <pos>
 SHOW MASTER STATUS;
 
-source include/show_binlog_events.inc;
+--replace_regex /\/\* xid=.* \*\//\/* XID *\// /Server ver: .*, Binlog ver: .*/Server ver: #, Binlog ver: #/ /table_id: [0-9]+/table_id: #/
+SHOW BINLOG EVENTS;
 
 
 --echo *** MDEV-7310: last_commit_pos_offset set to wrong value after binlog rotate in group commit ***

@@ -1,5 +1,4 @@
 # Copyright(C) 2015  Naoya Murakami <naoya@createfield.com>
-# Copyright(C) 2015  Kouhei SUtou <kou@clear-code.com>
 #
 # This library is free software; you can redistribute it and/or
 # modify it under the terms of the GNU Lesser General Public
@@ -13,7 +12,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 --source ../../include/mroonga/have_mroonga.inc
 --source ../../include/mroonga/load_mroonga_functions.inc
@@ -28,7 +27,7 @@ SET NAMES utf8;
 
 CREATE TABLE memos (
   content VARCHAR(64) NOT NULL,
-  FULLTEXT INDEX (content) COMMENT 'flags "NONE"'
+  FULLTEXT INDEX (content) COMMENT 'index_flags "NONE"'
 ) DEFAULT CHARSET=utf8;
 
 SELECT mroonga_command("dump --dump_plugins no --dump_schema no");

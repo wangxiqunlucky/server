@@ -12,12 +12,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define _GNU_SOURCE 1 /* for strndup */
 
 #include <mysql/plugin_auth.h>
-#include <stdio.h>
 #include <string.h>
 #include <security/pam_appl.h>
 #include <security/pam_modules.h>
@@ -43,13 +42,6 @@ char *strndup(const char *from, size_t length)
   }
   return ptr;
 }
-#endif
-
-#ifndef DBUG_OFF
-static char pam_debug = 0;
-#define PAM_DEBUG(X)   do { if (pam_debug) { fprintf X; } } while(0)
-#else
-#define PAM_DEBUG(X)   /* no-op */
 #endif
 
 static int conv(int n, const struct pam_message **msg,
@@ -99,20 +91,14 @@ static int conv(int n, const struct pam_message **msg,
            4 means "password-like input, echo disabled"
          C'est la vie. */
       param->buf[0] = msg[i]->msg_style == PAM_PROMPT_ECHO_ON ? 2 : 4;
-      PAM_DEBUG((stderr, "PAM: conv: send(%.*s)\n", (int)(param->ptr - param->buf - 1), param->buf));
       if (param->vio->write_packet(param->vio, param->buf, param->ptr - param->buf - 1))
         return PAM_CONV_ERR;
 
       pkt_len = param->vio->read_packet(param->vio, &pkt);
       if (pkt_len < 0)
-      {
-        PAM_DEBUG((stderr, "PAM: conv: recv() ERROR\n"));
         return PAM_CONV_ERR;
-      }
-      PAM_DEBUG((stderr, "PAM: conv: recv(%.*s)\n", pkt_len, pkt));
       /* allocate and copy the reply to the response array */
-      if (!((*resp)[i].resp= strndup((char*) pkt, pkt_len)))
-        return PAM_CONV_ERR;
+      (*resp)[i].resp = strndup((char*)pkt, pkt_len);
       param->ptr = param->buf + 1;
     }
   }
@@ -131,7 +117,7 @@ static int pam_auth(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
 {
   pam_handle_t *pamh = NULL;
   int status;
-  const char *new_username= NULL;
+  const char *new_username;
   struct param param;
   /* The following is written in such a way to make also solaris happy */
   struct pam_conv pam_start_arg = { &conv, (char*) &param };
@@ -139,7 +125,7 @@ static int pam_auth(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
   /*
     get the service name, as specified in
 
-     CREATE USER ... IDENTIFIED WITH pam AS "service"
+     CREATE USER ... IDENTIFIED WITH pam_auth AS  "service"
   */
   const char *service = info->auth_string && info->auth_string[0]
                           ? info->auth_string : "mysql";
@@ -147,25 +133,18 @@ static int pam_auth(MYSQL_PLUGIN_VIO *vio, MYSQL_SERVER_AUTH_INFO *info)
   param.ptr = param.buf + 1;
   param.vio = vio;
 
-  PAM_DEBUG((stderr, "PAM: pam_start(%s, %s)\n", service, info->user_name));
   DO( pam_start(service, info->user_name, &pam_start_arg, &pamh) );
-
-  PAM_DEBUG((stderr, "PAM: pam_authenticate(0)\n"));
   DO( pam_authenticate (pamh, 0) );
-
-  PAM_DEBUG((stderr, "PAM: pam_acct_mgmt(0)\n"));
   DO( pam_acct_mgmt(pamh, 0) );
-
-  PAM_DEBUG((stderr, "PAM: pam_get_item(PAM_USER)\n"));
   DO( pam_get_item(pamh, PAM_USER, (pam_get_item_3_arg) &new_username) );
 
   if (new_username && strcmp(new_username, info->user_name))
     strncpy(info->authenticated_as, new_username,
             sizeof(info->authenticated_as));
+  info->authenticated_as[sizeof(info->authenticated_as)-1]= 0;
 
 end:
   pam_end(pamh, status);
-  PAM_DEBUG((stderr, "PAM: status = %d user = %s\n", status, new_username));
   return status == PAM_SUCCESS ? CR_OK : CR_ERROR;
 }
 
@@ -184,17 +163,8 @@ static MYSQL_SYSVAR_BOOL(use_cleartext_plugin, use_cleartext_plugin,
        "supports simple PAM policies that don't require anything besides "
        "a password", NULL, NULL, 0);
 
-#ifndef DBUG_OFF
-static MYSQL_SYSVAR_BOOL(debug, pam_debug, PLUGIN_VAR_OPCMDARG,
-       "Log all PAM activity", NULL, NULL, 0);
-#endif
-
-
 static struct st_mysql_sys_var* vars[] = {
   MYSQL_SYSVAR(use_cleartext_plugin),
-#ifndef DBUG_OFF
-  MYSQL_SYSVAR(debug),
-#endif
   NULL
 };
 

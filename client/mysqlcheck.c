@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2001, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2016, MariaDB
+   Copyright (c) 2010, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -857,11 +857,10 @@ static int use_db(char *database)
   DBUG_RETURN(0);
 } /* use_db */
 
-/* Do not send commands to replication slaves. */
 static int disable_binlog()
 {
-  mysql_query(sock, "SET WSREP_ON=0"); /* ignore the error, if any */
-  return run_query("SET SQL_LOG_BIN=0", 0);
+  const char *stmt= "SET SQL_LOG_BIN=0";
+  return run_query(stmt, 0);
 }
 
 static int handle_request_for_tables(char *tables, size_t length,

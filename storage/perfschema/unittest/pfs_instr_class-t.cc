@@ -1,4 +1,4 @@
-/* Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+/* Copyright (c) 2008, 2017, Oracle and/or its affiliates. All rights reserved.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -653,6 +653,8 @@ void test_instruments_reset()
 
 void do_all_tests()
 {
+  PFS_atomic::init();
+
   test_no_registration();
   test_mutex_registration();
   test_rwlock_registration();
@@ -662,6 +664,8 @@ void do_all_tests()
   test_socket_registration();
   test_table_registration();
   test_instruments_reset();
+
+  PFS_atomic::cleanup();
 }
 
 int main(int argc, char **argv)
@@ -670,5 +674,5 @@ int main(int argc, char **argv)
   MY_INIT(argv[0]);
   do_all_tests();
   my_end(0);
-  return exit_status();
+  return (exit_status());
 }

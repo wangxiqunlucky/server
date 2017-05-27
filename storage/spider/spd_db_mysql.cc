@@ -11,7 +11,7 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define MYSQL_SERVER 1
 #include "mysql_version.h"
@@ -4041,7 +4041,7 @@ int spider_db_mysql_util::open_item_func(
       {
         Item_func_conv_charset *item_func_conv_charset =
           (Item_func_conv_charset *)item_func;
-        CHARSET_INFO *conv_charset = item_func_conv_charset->collation.collation;
+        CHARSET_INFO *conv_charset = item_func_conv_charset->conv_charset;
         uint cset_length = strlen(conv_charset->csname);
         if (str->reserve(SPIDER_SQL_USING_LEN + cset_length))
           DBUG_RETURN(HA_ERR_OUT_OF_MEM);

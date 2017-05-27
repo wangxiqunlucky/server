@@ -6,8 +6,6 @@
 #
 
 --source include/not_embedded.inc
-set GLOBAL sql_mode="";
-set LOCAL sql_mode="";
 
 alter table mysql.user modify User char(16) binary not null default '';
 alter table mysql.db modify User char(16) binary not null default '';
@@ -42,4 +40,3 @@ flush privileges;
 select user();
 --disable_metadata
 
-set GLOBAL sql_mode=default;

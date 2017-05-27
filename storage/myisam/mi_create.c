@@ -730,6 +730,7 @@ int mi_create(const char *name,uint keys,MI_KEYDEF *keydefs,
       sseg.language= 7;                         /* Binary */
       sseg.null_bit=0;
       sseg.bit_start=0;
+      sseg.bit_end=0;
       sseg.bit_length= 0;
       sseg.bit_pos= 0;
       sseg.length=SPLEN;

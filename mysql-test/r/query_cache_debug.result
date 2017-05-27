@@ -1,4 +1,3 @@
-set global query_cache_type= ON;
 flush status;
 set query_cache_type=DEMAND;
 set global query_cache_size= 1024*768;

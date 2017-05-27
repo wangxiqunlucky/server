@@ -14,7 +14,7 @@
 #define PACKAGE_URL          "${PACKAGE_URL}"
 #define PACKAGE_VERSION      "${VERSION}"
 
-/* Groonga related constants */
+/* groonga related constants */
 #define GRN_CONFIG_PATH      "${GRN_CONFIG_PATH}"
 #define GRN_LOG_PATH         "${GRN_LOG_PATH}"
 #define GRN_VERSION          "${GRN_VERSION}"
@@ -98,13 +98,17 @@
 #cmakedefine HAVE_ERRNO_H
 #cmakedefine HAVE_EXECINFO_H
 #cmakedefine HAVE_INTTYPES_H
+#cmakedefine HAVE_IO_H
 #cmakedefine HAVE_LINUX_FUTEX_H
 #cmakedefine HAVE_MEMORY_H
 #cmakedefine HAVE_NETDB_H
+#cmakedefine HAVE_NETINET_IN_H
+#cmakedefine HAVE_NETINET_TCP_H
 #cmakedefine HAVE_PTHREAD_H
 #cmakedefine HAVE_SIGNAL_H
 #cmakedefine HAVE_STDARG_H
 #cmakedefine HAVE_STDINT_H
+#cmakedefine HAVE_STDLIB_H
 #cmakedefine HAVE_STRINGS_H
 #cmakedefine HAVE_STRING_H
 #cmakedefine HAVE_SYS_MMAN_H
@@ -116,6 +120,7 @@
 #cmakedefine HAVE_SYS_SYSCALL_H
 #cmakedefine HAVE_SYS_SYSCTL_H
 #cmakedefine HAVE_SYS_TIME_H
+#cmakedefine HAVE_SYS_TYPES_H
 #cmakedefine HAVE_SYS_WAIT_H
 #cmakedefine HAVE_TIME_H
 #cmakedefine HAVE_UCONTEXT_H

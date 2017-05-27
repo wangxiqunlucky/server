@@ -341,7 +341,7 @@ bool ZIPUTIL::OpenTable(PGLOBAL g, MODE mode, PCSZ fn, bool append)
 bool ZIPUTIL::addEntry(PGLOBAL g, PCSZ entry)
 {
 	//?? we dont need the stinking time
-	zip_fileinfo zi = { 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	zip_fileinfo zi = { {0, 0, 0, 0, 0, 0}, 0, 0, 0 };
 
 	getTime(zi.tmz_date);
 	target = entry;
@@ -455,7 +455,7 @@ loopStart:
 			if (!*++pat) return TRUE;
 			goto loopStart;
 		default:
-			if (mapCaseTable[(uint)*s] != mapCaseTable[(uint)*p])
+			if (mapCaseTable[(uchar)*s] != mapCaseTable[(uchar)*p])
 				goto starCheck;
 			break;
 		} /* endswitch */

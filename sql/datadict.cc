@@ -39,26 +39,24 @@ static int read_string(File file, uchar**to, size_t length)
 /**
   Check type of .frm if we are not going to parse it.
 
-  @param[in]  thd               The current session.
-  @param[in]  path              path to FRM file.
-  @param[in/out] engine_name    table engine name (length < NAME_CHAR_LEN)
-
-  engine_name is a LEX_STRING, where engine_name->str must point to
-  a buffer of at least NAME_CHAR_LEN+1 bytes.
+  @param[in]  thd   The current session.
+  @param[in]  path  path to FRM file.
+  @param[out] dbt   db_type of the table if FRMTYPE_TABLE, otherwise undefined.
 
   @retval  FRMTYPE_ERROR        error
   @retval  FRMTYPE_TABLE        table
   @retval  FRMTYPE_VIEW         view
 */
 
-frm_type_enum dd_frm_type(THD *thd, char *path, LEX_STRING *engine_name)
+frm_type_enum dd_frm_type(THD *thd, char *path, enum legacy_db_type *dbt)
 {
   File file;
   uchar header[10];     //"TYPE=VIEW\n" it is 10 characters
   size_t error;
   frm_type_enum type= FRMTYPE_ERROR;
-  uchar dbt;
   DBUG_ENTER("dd_frm_type");
+
+  *dbt= DB_TYPE_UNKNOWN;
 
   if ((file= mysql_file_open(key_file_frm, path, O_RDONLY | O_SHARE, MYF(0))) < 0)
     DBUG_RETURN(FRMTYPE_ERROR);
@@ -74,24 +72,17 @@ frm_type_enum dd_frm_type(THD *thd, char *path, LEX_STRING *engine_name)
 
   type= FRMTYPE_TABLE;
 
-  if (!is_binary_frm_header(header) || !engine_name)
+  /*
+    This is just a check for DB_TYPE. We'll return default unknown type
+    if the following test is true (arg #3). This should not have effect
+    on return value from this function (default FRMTYPE_TABLE)
+  */
+  if (!is_binary_frm_header(header))
     goto err;
 
-  engine_name->length= 0;
-  dbt= header[3];
+  *dbt= (enum legacy_db_type) (uint) *(header + 3);
 
-  /* cannot use ha_resolve_by_legacy_type without a THD */
-  if (thd && dbt < DB_TYPE_FIRST_DYNAMIC)
-  {
-    handlerton *ht= ha_resolve_by_legacy_type(thd, (enum legacy_db_type)dbt);
-    if (ht)
-    {
-      *engine_name= hton2plugin[ht->slot]->name;
-      goto err;
-    }
-  }
-
-  /* read the true engine name */
+  if (*dbt >= DB_TYPE_FIRST_DYNAMIC) /* read the true engine name */
   {
     MY_STAT state;  
     uchar *frm_image= 0;
@@ -119,10 +110,15 @@ frm_type_enum dd_frm_type(THD *thd, char *path, LEX_STRING *engine_name)
       next_chunk+= connect_string_length + 2;
       if (next_chunk + 2 < buff_end)
       {
-        uint len= uint2korr(next_chunk);
-        if (len <= NAME_CHAR_LEN)
-          strmake(engine_name->str, (char*)next_chunk + 2,
-                  engine_name->length= len);
+        uint str_db_type_length= uint2korr(next_chunk);
+        LEX_STRING name;
+        name.str= (char*) next_chunk + 2;
+        name.length= str_db_type_length;
+        plugin_ref tmp_plugin= ha_resolve_by_name(thd, &name);
+        if (tmp_plugin)
+          *dbt= plugin_data(tmp_plugin, handlerton *)->db_type;
+        else
+          *dbt= DB_TYPE_UNKNOWN;
       }
     }
 

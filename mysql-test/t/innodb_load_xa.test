@@ -3,10 +3,6 @@
 #
 --source include/not_embedded.inc
 
-# this test needs exactly one (1) XA-capable engine running initially.
-# it's binlog "engine" in 10.0 but wsrep in here, because it cannot be disabled
---source include/have_wsrep.inc
-
 if (!$HA_INNODB_SO) {
   --skip Need InnoDB plugin
 }
@@ -17,7 +13,7 @@ start transaction;
 insert t1 values (1);
 insert t1 values (2);
 commit;
-show status like 'Handler_prepare';
+--source include/show_binlog_events.inc
 drop table t1;
 uninstall plugin innodb;
 

@@ -1,6 +1,5 @@
 /* Copyright (C) 2007-2015 Arjen G Lentz & Antony T Curtis for Open Query
    Copyright (C) 2013-2015 Andrew McDonnell
-   Copyright (C) 2014 Sergei Golubchik
    Portions of this file copyright (C) 2000-2006 MySQL AB
 
    This program is free software; you can redistribute it and/or modify
@@ -14,7 +13,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* ======================================================================
    Open Query Graph Computation Engine, based on a concept by Arjen Lentz
@@ -63,7 +62,7 @@
 #ifdef VERBOSE_DEBUG
 #else
 #undef DBUG_PRINT
-#define DBUG_PRINT(x,y)
+#define DBUG_PRINT(x ...)
 #endif
 
 #ifdef RETAIN_INT_LATCH_COMPATIBILITY
@@ -136,41 +135,6 @@ static handler* oqgraph_create_handler(handlerton *hton, TABLE_SHARE *table,
   return new (mem_root) ha_oqgraph(hton, table);
 }
 
-#define OQGRAPH_CREATE_TABLE                              \
-"         CREATE TABLE oq_graph (                        "\
-"           latch VARCHAR(32) NULL,                      "\
-"           origid BIGINT UNSIGNED NULL,                 "\
-"           destid BIGINT UNSIGNED NULL,                 "\
-"           weight DOUBLE NULL,                          "\
-"           seq BIGINT UNSIGNED NULL,                    "\
-"           linkid BIGINT UNSIGNED NULL,                 "\
-"           KEY (latch, origid, destid) USING HASH,      "\
-"           KEY (latch, destid, origid) USING HASH       "\
-"         )                                              "
-
-#define append_opt(NAME,VAL)                                    \
-  if (share->option_struct->VAL)                                \
-  {                                                             \
-    sql.append(STRING_WITH_LEN(" " NAME "='"));                  \
-    sql.append_for_single_quote(share->option_struct->VAL);     \
-    sql.append('\'');                                           \
-  }
-
-int oqgraph_discover_table_structure(handlerton *hton, THD* thd,
-                                     TABLE_SHARE *share, HA_CREATE_INFO *info)
-{
-  StringBuffer<1024> sql(system_charset_info);
-  sql.copy(STRING_WITH_LEN(OQGRAPH_CREATE_TABLE), system_charset_info);
-
-  append_opt("data_table", table_name);
-  append_opt("origid", origid);
-  append_opt("destid", destid);
-  append_opt("weight", weight);
-
-  return
-    share->init_from_sql_statement_string(thd, true, sql.ptr(), sql.length());
-}
-
 int oqgraph_close_connection(handlerton *hton, THD *thd);
 
 static int oqgraph_init(void *p)
@@ -188,8 +152,6 @@ static int oqgraph_init(void *p)
   // HTON_NO_FLAGS;
 
   hton->table_options= (ha_create_table_option*)oqgraph_table_option_list;
-
-  hton->discover_table_structure= oqgraph_discover_table_structure;
 
   hton->close_connection = oqgraph_close_connection;
 
@@ -833,6 +795,7 @@ int ha_oqgraph::index_next_same(byte *buf, const byte *key, uint key_len)
   DBUG_ASSERT(inited==INDEX);
   if (!(res= graph->fetch_row(row)))
     res= fill_record(buf, row);
+  table->status= res ? STATUS_NOT_FOUND : 0;
   return error_code(res);
 }
 
@@ -931,6 +894,7 @@ int ha_oqgraph::index_read_idx(byte * buf, uint index, const byte * key,
       if (!parse_latch_string_to_legacy_int(latchFieldValue, latch)) {
         // Invalid, so warn & fail
         push_warning_printf(current_thd, Sql_condition::WARN_LEVEL_WARN, ER_WRONG_ARGUMENTS, ER(ER_WRONG_ARGUMENTS), "OQGRAPH latch");
+        table->status = STATUS_NOT_FOUND;
         if (ptrdiff) /* fixes debug build assert - should be a tidier way to do this */
         {
           field[0]->move_field_offset(-ptrdiff);
@@ -986,6 +950,7 @@ int ha_oqgraph::index_read_idx(byte * buf, uint index, const byte * key,
   if (!res && !(res= graph->fetch_row(row))) {
     res= fill_record(buf, row);
   }
+  table->status = res ? STATUS_NOT_FOUND : 0;
   return error_code(res);
 }
 
@@ -1094,6 +1059,7 @@ int ha_oqgraph::rnd_next(byte *buf)
 
   if (!(res= graph->fetch_row(row)))
     res= fill_record(buf, row);
+  table->status= res ? STATUS_NOT_FOUND: 0;
   return error_code(res);
 }
 
@@ -1107,6 +1073,7 @@ int ha_oqgraph::rnd_pos(byte * buf, byte *pos)
   open_query::row row;
   if (!(res= graph->fetch_row(row, pos)))
     res= fill_record(buf, row);
+  table->status=res ? STATUS_NOT_FOUND: 0;
   return error_code(res);
 }
 
@@ -1380,6 +1347,6 @@ maria_declare_plugin(oqgraph)
   oqgraph_status,                /* status variables             */
   oqgraph_sysvars,               /* system variables             */
   "3.0",
-  MariaDB_PLUGIN_MATURITY_GAMMA
+  MariaDB_PLUGIN_MATURITY_BETA
 }
 maria_declare_plugin_end;

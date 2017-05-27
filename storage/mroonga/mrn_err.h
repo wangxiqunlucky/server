@@ -1,6 +1,4 @@
-/*
-  Copyright(C) 2011 Kentoku SHIBA
-  Copyright(C) 2014-2015 Kouhei Sutou <kou@clear-code.com>
+/* Copyright(C) 2011 Kentoku SHIBA
 
   This library is free software; you can redistribute it and/or
   modify it under the terms of the GNU Lesser General Public
@@ -35,7 +33,7 @@
   "The column flag '%-.64s' is unsupported. It is ignored"
 #define ER_MRN_INVALID_COLUMN_FLAG_NUM 16507
 #define ER_MRN_INVALID_COLUMN_FLAG_STR \
-  "The column flag '%-.64s' is invalid. It is ignored"
+  "The column flag '%-.64s' is invalid. '%-64s' is used instead"
 #define ER_MRN_INVALID_INDEX_FLAG_NUM 16508
 #define ER_MRN_INVALID_INDEX_FLAG_STR \
   "The index flag '%-.64s' is invalid. It is ignored"

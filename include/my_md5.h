@@ -28,7 +28,7 @@
 extern "C" {
 #endif
 
-#define compute_md5_hash(A,B,C) my_md5(A,B,C)
+void compute_md5_hash(char *digest, const char *buf, int len);
 
 /*
   Convert an array of bytes to a hexadecimal representation.

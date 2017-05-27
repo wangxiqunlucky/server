@@ -11,7 +11,7 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define MYSQL_SERVER 1
 #include "mysql_version.h"
@@ -1844,8 +1844,8 @@ int spider_db_append_key_where_internal(
 #if defined(MARIADB_BASE_VERSION) && MYSQL_VERSION_ID >= 100000
           case HA_READ_PREFIX_LAST:
             result_list->desc_flg = TRUE;
-            /* fall through */
 #endif
+            /* fall through */
           case HA_READ_KEY_EXACT:
             if (sql_kind == SPIDER_SQL_KIND_SQL)
             {

@@ -42,8 +42,6 @@
 #include "sql_derived.h"
 #include "sql_show.h"
 
-extern "C" int _my_b_net_read(IO_CACHE *info, uchar *Buffer, size_t Count);
-
 class XML_TAG {
 public:
   int level;
@@ -76,6 +74,8 @@ class READ_INFO {
   int	field_term_char,line_term_char,enclosed_char,escape_char;
   int	*stack,*stack_pos;
   bool	found_end_of_line,start_of_line,eof;
+  bool  need_end_io_cache;
+  IO_CACHE cache;
   NET *io_net;
   int level; /* for load xml */
 
@@ -159,7 +159,6 @@ public:
   uchar	*row_start,			/* Found row starts here */
 	*row_end;			/* Found row ends here */
   CHARSET_INFO *read_charset;
-  LOAD_FILE_IO_CACHE cache;
 
   READ_INFO(File file,uint tot_length,CHARSET_INFO *cs,
 	    String &field_term,String &line_start,String &line_term,
@@ -174,11 +173,27 @@ public:
   /* load xml */
   List<XML_TAG> taglist;
   int read_value(int delim, String *val);
-  int read_xml(THD *thd);
+  int read_xml();
   int clear_level(int level);
 
+  /*
+    We need to force cache close before destructor is invoked to log
+    the last read block
+  */
+  void end_io_cache()
+  {
+    ::end_io_cache(&cache);
+    need_end_io_cache = 0;
+  }
   my_off_t file_length() { return cache.end_of_file; }
   my_off_t position()    { return my_b_tell(&cache); }
+
+  /*
+    Either this method, or we need to make cache public
+    Arg must be set from mysql_load() since constructor does not see
+    either the table or THD value
+  */
+  void set_io_cache_arg(void* arg) { cache.arg = arg; }
 
   /**
     skip all data till the eof.
@@ -247,6 +262,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
   String *enclosed=ex->enclosed;
   bool is_fifo=0;
 #ifndef EMBEDDED_LIBRARY
+  LOAD_FILE_INFO lf_info;
   killed_state killed_status;
   bool is_concurrent;
 #endif
@@ -275,8 +291,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
 
   if (escaped->length() > 1 || enclosed->length() > 1)
   {
-    my_message(ER_WRONG_FIELD_TERMINATORS,
-               ER_THD(thd, ER_WRONG_FIELD_TERMINATORS),
+    my_message(ER_WRONG_FIELD_TERMINATORS,ER(ER_WRONG_FIELD_TERMINATORS),
 	       MYF(0));
     DBUG_RETURN(TRUE);
   }
@@ -288,7 +303,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
   {
     push_warning(thd, Sql_condition::WARN_LEVEL_WARN,
                  WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED,
-                 ER_THD(thd, WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED));
+                 ER(WARN_NON_ASCII_SEPARATOR_NOT_IMPLEMENTED));
   } 
 
   if (open_and_lock_tables(thd, table_list, TRUE, 0))
@@ -346,7 +361,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
       Item *item;
       if (!(item= field_iterator.create_item(thd)))
         DBUG_RETURN(TRUE);
-      fields_vars.push_back(item->real_item(), thd->mem_root);
+      fields_vars.push_back(item->real_item());
     }
     bitmap_set_all(table->write_set);
     /*
@@ -371,9 +386,6 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
     if (setup_fields(thd, 0, set_values, MARK_COLUMNS_READ, 0, 0))
       DBUG_RETURN(TRUE);
   }
-  switch_to_nullable_trigger_fields(fields_vars, table);
-  switch_to_nullable_trigger_fields(set_fields, table);
-  switch_to_nullable_trigger_fields(set_values, table);
 
   table->prepare_triggers_for_insert_stmt_or_event();
   table->mark_columns_needed_for_insert();
@@ -415,8 +427,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
   }
   if (use_blobs && !ex->line_term->length() && !field_term->length())
   {
-    my_message(ER_BLOBS_AND_NO_TERMINATED,
-               ER_THD(thd, ER_BLOBS_AND_NO_TERMINATED),
+    my_message(ER_BLOBS_AND_NO_TERMINATED,ER(ER_BLOBS_AND_NO_TERMINATED),
 	       MYF(0));
     DBUG_RETURN(TRUE);
   }
@@ -530,10 +541,11 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
 #ifndef EMBEDDED_LIBRARY
   if (mysql_bin_log.is_open())
   {
-    read_info.cache.thd = thd;
-    read_info.cache.wrote_create_file = 0;
-    read_info.cache.last_pos_in_file = HA_POS_ERROR;
-    read_info.cache.log_delayed= transactional_table;
+    lf_info.thd = thd;
+    lf_info.wrote_create_file = 0;
+    lf_info.last_pos_in_file = HA_POS_ERROR;
+    lf_info.log_delayed= transactional_table;
+    read_info.set_io_cache_arg((void*) &lf_info);
   }
 #endif /*!EMBEDDED_LIBRARY*/
 
@@ -570,12 +582,7 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
     thd->abort_on_warning= !ignore && thd->is_strict_mode();
 
     thd_progress_init(thd, 2);
-    if (table_list->table->validate_default_values_of_unset_fields(thd))
-    {
-      read_info.error= true;
-      error= 1;
-    }
-    else if (ex->filetype == FILETYPE_XML) /* load xml */
+    if (ex->filetype == FILETYPE_XML) /* load xml */
       error= read_xml_field(thd, info, table_list, fields_vars,
                             set_fields, set_values, read_info,
                             *(ex->line_term), skip_lines, ignore);
@@ -635,12 +642,30 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
     {
       {
 	/*
-          Make sure last block (the one which caused the error) gets
-          logged.
+	  Make sure last block (the one which caused the error) gets
+	  logged.  This is needed because otherwise after write of (to
+	  the binlog, not to read_info (which is a cache))
+	  Delete_file_log_event the bad block will remain in read_info
+	  (because pre_read is not called at the end of the last
+	  block; remember pre_read is called whenever a new block is
+	  read from disk).  At the end of mysql_load(), the destructor
+	  of read_info will call end_io_cache() which will flush
+	  read_info, so we will finally have this in the binlog:
+
+	  Append_block # The last successfull block
+	  Delete_file
+	  Append_block # The failing block
+	  which is nonsense.
+	  Or could also be (for a small file)
+	  Create_file  # The failing block
+	  which is nonsense (Delete_file is not written in this case, because:
+	  Create_file has not been written, so Delete_file is not written, then
+	  when read_info is destroyed end_io_cache() is called which writes
+	  Create_file.
 	*/
-        log_loaded_block(&read_info.cache, 0, 0);
+	read_info.end_io_cache();
 	/* If the file was not empty, wrote_create_file is true */
-        if (read_info.cache.wrote_create_file)
+	if (lf_info.wrote_create_file)
 	{
           int errcode= query_error_code(thd, killed_status == NOT_KILLED);
           
@@ -666,15 +691,12 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
     error= -1;				// Error on read
     goto err;
   }
-  sprintf(name, ER_THD(thd, ER_LOAD_INFO),
-          (ulong) info.records, (ulong) info.deleted,
+  sprintf(name, ER(ER_LOAD_INFO), (ulong) info.records, (ulong) info.deleted,
 	  (ulong) (info.records - info.copied),
           (long) thd->get_stmt_da()->current_statement_warn_count());
 
   if (thd->transaction.stmt.modified_non_trans_table)
     thd->transaction.all.modified_non_trans_table= TRUE;
-  thd->transaction.all.m_unsafe_rollback_flags|=
-    (thd->transaction.stmt.m_unsafe_rollback_flags & THD_TRANS::DID_WAIT);
 #ifndef EMBEDDED_LIBRARY
   if (mysql_bin_log.is_open())
   {
@@ -691,11 +713,12 @@ int mysql_load(THD *thd,sql_exchange *ex,TABLE_LIST *table_list,
     else
     {
       /*
-        As already explained above, we need to call log_loaded_block() to have
-        the last block logged
+        As already explained above, we need to call end_io_cache() or the last
+        block will be logged only after Execute_load_query_log_event (which is
+        wrong), when read_info is destroyed.
       */
-      log_loaded_block(&read_info.cache, 0, 0);
-      if (read_info.cache.wrote_create_file)
+      read_info.end_io_cache();
+      if (lf_info.wrote_create_file)
       {
         int errcode= query_error_code(thd, killed_status == NOT_KILLED);
         error= write_execute_load_query_log_event(thd, ex,
@@ -847,7 +870,7 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
   List_iterator_fast<Item> it(fields_vars);
   Item_field *sql_field;
   TABLE *table= table_list->table;
-  bool err, progress_reports, auto_increment_field_not_null=false;
+  bool err, progress_reports;
   ulonglong counter, time_to_report_progress;
   DBUG_ENTER("read_fixed_length");
 
@@ -856,12 +879,6 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
   progress_reports= 1;
   if ((thd->progress.max_counter= read_info.file_length()) == ~(my_off_t) 0)
     progress_reports= 0;
-
-  while ((sql_field= (Item_field*) it++))
-  {
-    if (table->field[sql_field->field->field_index] == table->next_number_field)
-      auto_increment_field_not_null= true;
-  }
 
   while (!read_info.read_fixed_length())
   {
@@ -905,7 +922,8 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
     while ((sql_field= (Item_field*) it++))
     {
       Field *field= sql_field->field;                  
-      table->auto_increment_field_not_null= auto_increment_field_not_null;
+      if (field == table->next_number_field)
+        table->auto_increment_field_not_null= TRUE;
       /*
         No fields specified in fields_vars list can be null in this format.
         Mark field as not null, we should do this for each row because of
@@ -918,7 +936,7 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
         thd->cuted_fields++;			/* Not enough fields */
         push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                             ER_WARN_TOO_FEW_RECORDS,
-                            ER_THD(thd, ER_WARN_TOO_FEW_RECORDS),
+                            ER(ER_WARN_TOO_FEW_RECORDS),
                             thd->get_stmt_da()->current_row_for_warning());
         /*
           Timestamp fields that are NOT NULL are autoupdated if there is no
@@ -948,7 +966,7 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
       thd->cuted_fields++;			/* To long row */
       push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                           ER_WARN_TOO_MANY_RECORDS,
-                          ER_THD(thd, ER_WARN_TOO_MANY_RECORDS),
+                          ER(ER_WARN_TOO_MANY_RECORDS),
                           thd->get_stmt_da()->current_row_for_warning());
     }
 
@@ -959,7 +977,8 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
         (table->default_field && table->update_default_fields()))
       DBUG_RETURN(1);
 
-    switch (table_list->view_check_option(thd, ignore_check_option_errors)) {
+    switch (table_list->view_check_option(thd,
+                                          ignore_check_option_errors)) {
     case VIEW_CHECK_SKIP:
       read_info.next_line();
       goto continue_loop;
@@ -983,7 +1002,7 @@ read_fixed_length(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
       thd->cuted_fields++;			/* To long row */
       push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                           ER_WARN_TOO_MANY_RECORDS,
-                          ER_THD(thd, ER_WARN_TOO_MANY_RECORDS),
+                          ER(ER_WARN_TOO_MANY_RECORDS),
                           thd->get_stmt_da()->current_row_for_warning());
     }
     thd->get_stmt_da()->inc_current_row_for_warning();
@@ -1041,7 +1060,7 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
     {
       uint length;
       uchar *pos;
-      Item *real_item;
+      Item_field *real_item;
 
       if (read_info.read_field())
 	break;
@@ -1053,16 +1072,26 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
       pos=read_info.row_start;
       length=(uint) (read_info.row_end-pos);
 
-      real_item= item->real_item();
+      real_item= item->field_for_view_update();
 
       if ((!read_info.enclosed &&
            (enclosed_length && length == 4 &&
             !memcmp(pos, STRING_WITH_LEN("NULL")))) ||
 	  (length == 1 && read_info.found_null))
       {
-        if (real_item->type() == Item::FIELD_ITEM)
+        if (item->type() == Item::STRING_ITEM)
         {
-          Field *field= ((Item_field *)real_item)->field;
+          ((Item_user_var_as_out_param *)item)->set_null_value(
+                                                  read_info.read_charset);
+        }
+        else if (!real_item)
+        {
+          my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->name);
+          DBUG_RETURN(1);
+        }
+        else
+        {
+          Field *field= real_item->field;
           if (field->reset())
           {
             my_error(ER_WARN_NULL_TO_NOTNULL, MYF(0), field->field_name,
@@ -1085,39 +1114,29 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
           /* Do not auto-update this field. */
           field->set_has_explicit_value();
 	}
-        else if (item->type() == Item::STRING_ITEM)
-        {
-          ((Item_user_var_as_out_param *)item)->set_null_value(
-                                                  read_info.read_charset);
-        }
-        else
-        {
-          my_error(ER_LOAD_DATA_INVALID_COLUMN, MYF(0), item->full_name());
-          DBUG_RETURN(1);
-        }
 
 	continue;
       }
 
-      if (real_item->type() == Item::FIELD_ITEM)
+      if (item->type() == Item::STRING_ITEM)
       {
-        Field *field= ((Item_field *)real_item)->field;
+        ((Item_user_var_as_out_param *)item)->set_value((char*) pos, length,
+                                                        read_info.read_charset);
+      }
+      else if (!real_item)
+      {
+        my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->name);
+        DBUG_RETURN(1);
+      }
+      else
+      {
+        Field *field= real_item->field;
         field->set_notnull();
         read_info.row_end[0]=0;			// Safe to change end marker
         if (field == table->next_number_field)
           table->auto_increment_field_not_null= TRUE;
         field->store((char*) pos, length, read_info.read_charset);
         field->set_has_explicit_value();
-      }
-      else if (item->type() == Item::STRING_ITEM)
-      {
-        ((Item_user_var_as_out_param *)item)->set_value((char*) pos, length,
-                                                        read_info.read_charset);
-      }
-      else
-      {
-        my_error(ER_LOAD_DATA_INVALID_COLUMN, MYF(0), item->full_name());
-        DBUG_RETURN(1);
       }
     }
 
@@ -1138,10 +1157,20 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
 	break;
       for (; item ; item= it++)
       {
-        Item *real_item= item->real_item();
-        if (real_item->type() == Item::FIELD_ITEM)
+        Item_field *real_item= item->field_for_view_update();
+        if (item->type() == Item::STRING_ITEM)
         {
-          Field *field= ((Item_field *)real_item)->field;
+          ((Item_user_var_as_out_param *)item)->set_null_value(
+                                                  read_info.read_charset);
+        }
+        else if (!real_item)
+        {
+          my_error(ER_NONUPDATEABLE_COLUMN, MYF(0), item->name);
+          DBUG_RETURN(1);
+        }
+        else
+        {
+          Field *field= real_item->field;
           if (field->reset())
           {
             my_error(ER_WARN_NULL_TO_NOTNULL, MYF(0),field->field_name,
@@ -1160,18 +1189,8 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
           thd->cuted_fields++;
           push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                               ER_WARN_TOO_FEW_RECORDS,
-                              ER_THD(thd, ER_WARN_TOO_FEW_RECORDS),
+                              ER(ER_WARN_TOO_FEW_RECORDS),
                               thd->get_stmt_da()->current_row_for_warning());
-        }
-        else if (item->type() == Item::STRING_ITEM)
-        {
-          ((Item_user_var_as_out_param *)item)->set_null_value(
-                                                  read_info.read_charset);
-        }
-        else
-        {
-          my_error(ER_LOAD_DATA_INVALID_COLUMN, MYF(0), item->full_name());
-          DBUG_RETURN(1);
         }
       }
     }
@@ -1206,8 +1225,7 @@ read_sep_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
     {
       thd->cuted_fields++;			/* To long row */
       push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
-                          ER_WARN_TOO_MANY_RECORDS,
-                          ER_THD(thd, ER_WARN_TOO_MANY_RECORDS),
+                          ER_WARN_TOO_MANY_RECORDS, ER(ER_WARN_TOO_MANY_RECORDS),
                           thd->get_stmt_da()->current_row_for_warning());
       if (thd->killed)
         DBUG_RETURN(1);
@@ -1247,7 +1265,7 @@ read_xml_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
     }
     
     // read row tag and save values into tag list
-    if (read_info.read_xml(thd))
+    if (read_info.read_xml())
       break;
     
     List_iterator_fast<XML_TAG> xmlit(read_info.taglist);
@@ -1348,7 +1366,7 @@ read_xml_field(THD *thd, COPY_INFO &info, TABLE_LIST *table_list,
           thd->cuted_fields++;
           push_warning_printf(thd, Sql_condition::WARN_LEVEL_WARN,
                               ER_WARN_TOO_FEW_RECORDS,
-                              ER_THD(thd, ER_WARN_TOO_FEW_RECORDS),
+                              ER(ER_WARN_TOO_FEW_RECORDS),
                               thd->get_stmt_da()->current_row_for_warning());
         }
         else
@@ -1419,7 +1437,7 @@ READ_INFO::READ_INFO(File file_par, uint tot_length, CHARSET_INFO *cs,
 		     String &enclosed_par, int escape, bool get_it_from_net,
 		     bool is_fifo)
   :file(file_par), buffer(NULL), buff_length(tot_length), escape_char(escape),
-   found_end_of_line(false), eof(false),
+   found_end_of_line(false), eof(false), need_end_io_cache(false),
    error(false), line_cuted(false), found_null(false), read_charset(cs)
 {
   /*
@@ -1479,15 +1497,20 @@ READ_INFO::READ_INFO(File file_par, uint tot_length, CHARSET_INFO *cs,
     }
     else
     {
+      /*
+	init_io_cache() will not initialize read_function member
+	if the cache is READ_NET. So we work around the problem with a
+	manual assignment
+      */
+      need_end_io_cache = 1;
+
 #ifndef EMBEDDED_LIBRARY
       if (get_it_from_net)
 	cache.read_function = _my_b_net_read;
 
       if (mysql_bin_log.is_open())
-      {
-        cache.real_read_function= cache.read_function;
-        cache.read_function= log_loaded_block;
-      }
+	cache.pre_read = cache.pre_close =
+	  (IO_CACHE_CALLBACK) log_loaded_block;
 #endif
     }
   }
@@ -1496,7 +1519,8 @@ READ_INFO::READ_INFO(File file_par, uint tot_length, CHARSET_INFO *cs,
 
 READ_INFO::~READ_INFO()
 {
-  ::end_io_cache(&cache);
+  if (need_end_io_cache)
+    ::end_io_cache(&cache);
   my_free(buffer);
   List_iterator<XML_TAG> xmlit(taglist);
   XML_TAG *t;
@@ -2008,7 +2032,7 @@ int READ_INFO::read_value(int delim, String *val)
   tags and attributes are stored in taglist
   when tag set in ROWS IDENTIFIED BY is closed, we are ready and return
 */
-int READ_INFO::read_xml(THD *thd)
+int READ_INFO::read_xml()
 {
   DBUG_ENTER("READ_INFO::read_xml");
   int chr, chr2, chr3;
@@ -2106,13 +2130,11 @@ int READ_INFO::read_xml(THD *thd)
         goto found_eof;
       
       /* save value to list */
-      if (tag.length() > 0 && value.length() > 0)
+      if(tag.length() > 0 && value.length() > 0)
       {
         DBUG_PRINT("read_xml", ("lev:%i tag:%s val:%s",
                                 level,tag.c_ptr_safe(), value.c_ptr_safe()));
-        XML_TAG *tmp= new XML_TAG(level, tag, value);
-        if (!tmp || taglist.push_front(tmp, thd->mem_root))
-          DBUG_RETURN(1);                       // End of memory
+        taglist.push_front( new XML_TAG(level, tag, value));
       }
       tag.length(0);
       value.length(0);
@@ -2179,15 +2201,13 @@ int READ_INFO::read_xml(THD *thd)
       }
       
       chr= read_value(delim, &value);
-      if (attribute.length() > 0 && value.length() > 0)
+      if(attribute.length() > 0 && value.length() > 0)
       {
         DBUG_PRINT("read_xml", ("lev:%i att:%s val:%s\n",
                                 level + 1,
                                 attribute.c_ptr_safe(),
                                 value.c_ptr_safe()));
-        XML_TAG *tmp= new XML_TAG(level + 1, attribute, value);
-        if (!tmp || taglist.push_front(tmp, thd->mem_root))
-          DBUG_RETURN(1);                       // End of memory
+        taglist.push_front(new XML_TAG(level + 1, attribute, value));
       }
       attribute.length(0);
       value.length(0);

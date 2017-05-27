@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /**
   @file
@@ -529,13 +529,12 @@ bool check_func_dependency(JOIN *join,
                            TABLE_LIST *oj_tbl,
                            Item* cond);
 static 
-void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *dac,
+void build_eq_mods_for_cond(Dep_analysis_context *dac, 
                             Dep_module_expr **eq_mod, uint *and_level, 
                             Item *cond);
 static 
 void check_equality(Dep_analysis_context *dac, Dep_module_expr **eq_mod, 
-                    uint and_level, Item_bool_func *cond,
-                    Item *left, Item *right);
+                    uint and_level, Item_func *cond, Item *left, Item *right);
 static 
 Dep_module_expr *merge_eq_mods(Dep_module_expr *start, 
                                  Dep_module_expr *new_fields, 
@@ -847,7 +846,7 @@ bool check_func_dependency(JOIN *join,
       Dep_value_field objects for the used fields.
   */
   uint and_level=0;
-  build_eq_mods_for_cond(join->thd, &dac, &last_eq_mod, &and_level, cond);
+  build_eq_mods_for_cond(&dac, &last_eq_mod, &and_level, cond);
   if (!(dac.n_equality_mods= last_eq_mod - dac.equality_mods))
     return FALSE;  /* No useful conditions */
 
@@ -1018,7 +1017,6 @@ public:
 bool Dep_analysis_context::setup_equality_modules_deps(List<Dep_module> 
                                                        *bound_modules)
 {
-  THD *thd= current_thd;
   DBUG_ENTER("setup_equality_modules_deps");
  
   /*
@@ -1043,7 +1041,7 @@ bool Dep_analysis_context::setup_equality_modules_deps(List<Dep_module>
   }
  
   void *buf;
-  if (!(buf= thd->alloc(bitmap_buffer_size(offset))) ||
+  if (!(buf= current_thd->alloc(bitmap_buffer_size(offset))) ||
       my_bitmap_init(&expr_deps, (my_bitmap_map*)buf, offset, FALSE))
   {
     DBUG_RETURN(TRUE); /* purecov: inspected */
@@ -1085,7 +1083,7 @@ bool Dep_analysis_context::setup_equality_modules_deps(List<Dep_module>
     }
 
     if (!eq_mod->unbound_args)
-      bound_modules->push_back(eq_mod, thd->mem_root);
+      bound_modules->push_back(eq_mod);
   }
 
   DBUG_RETURN(FALSE);
@@ -1151,7 +1149,7 @@ int compare_field_values(Dep_value_field *a, Dep_value_field *b, void *unused)
 */
 
 static 
-void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *ctx,
+void build_eq_mods_for_cond(Dep_analysis_context *ctx, 
                             Dep_module_expr **eq_mod,
                             uint *and_level, Item *cond)
 {
@@ -1165,7 +1163,7 @@ void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *ctx,
     {
       Item *item;
       while ((item=li++))
-        build_eq_mods_for_cond(thd, ctx, eq_mod, and_level, item);
+        build_eq_mods_for_cond(ctx, eq_mod, and_level, item);
 
       for (Dep_module_expr *mod_exp= ctx->equality_mods + orig_offset;
            mod_exp != *eq_mod ; mod_exp++)
@@ -1177,12 +1175,12 @@ void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *ctx,
     {
       Item *item;
       (*and_level)++;
-      build_eq_mods_for_cond(thd, ctx, eq_mod, and_level, li++);
+      build_eq_mods_for_cond(ctx, eq_mod, and_level, li++);
       while ((item=li++))
       {
         Dep_module_expr *start_key_fields= *eq_mod;
         (*and_level)++;
-        build_eq_mods_for_cond(thd, ctx, eq_mod, and_level, item);
+        build_eq_mods_for_cond(ctx, eq_mod, and_level, item);
         *eq_mod= merge_eq_mods(ctx->equality_mods + orig_offset, 
                                start_key_fields, *eq_mod,
                                ++(*and_level));
@@ -1201,30 +1199,27 @@ void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *ctx,
   case Item_func::BETWEEN:
   {
     Item *fld;
-    Item_func_between *func= (Item_func_between *) cond_func;
-    if (!func->negated &&
+    if (!((Item_func_between*)cond)->negated &&
         (fld= args[0]->real_item())->type() == Item::FIELD_ITEM &&
         args[1]->eq(args[2], ((Item_field*)fld)->field->binary()))
     {
-      check_equality(ctx, eq_mod, *and_level, func, args[0], args[1]);
-      check_equality(ctx, eq_mod, *and_level, func, args[1], args[0]);
+      check_equality(ctx, eq_mod, *and_level, cond_func, args[0], args[1]);
+      check_equality(ctx, eq_mod, *and_level, cond_func, args[1], args[0]);
     }
     break;
   }
   case Item_func::EQ_FUNC:
   case Item_func::EQUAL_FUNC:
   {
-    Item_bool_rowready_func2 *func= (Item_bool_rowready_func2*) cond_func;
-    check_equality(ctx, eq_mod, *and_level, func, args[0], args[1]);
-    check_equality(ctx, eq_mod, *and_level, func, args[1], args[0]);
+    check_equality(ctx, eq_mod, *and_level, cond_func, args[0], args[1]);
+    check_equality(ctx, eq_mod, *and_level, cond_func, args[1], args[0]);
     break;
   }
   case Item_func::ISNULL_FUNC:
   {
-    Item *tmp=new (thd->mem_root) Item_null(thd);
+    Item *tmp=new Item_null;
     if (tmp)
-      check_equality(ctx, eq_mod, *and_level,
-                     (Item_func_isnull*) cond_func, args[0], tmp);
+      check_equality(ctx, eq_mod, *and_level, cond_func, args[0], tmp);
     break;
   }
   case Item_func::MULT_EQUAL_FUNC:
@@ -1256,7 +1251,7 @@ void build_eq_mods_for_cond(THD *thd, Dep_analysis_context *ctx,
       {
         Dep_value_field *field_val;
         if ((field_val= ctx->get_field_value(equal_field)))
-          fvl->push_back(field_val, thd->mem_root);
+          fvl->push_back(field_val);
       }
       else
       {
@@ -1484,16 +1479,35 @@ Dep_module_expr *merge_eq_mods(Dep_module_expr *start,
 
 static 
 void check_equality(Dep_analysis_context *ctx, Dep_module_expr **eq_mod,
-                    uint and_level, Item_bool_func *cond,
-                    Item *left, Item *right)
+                    uint and_level, Item_func *cond, Item *left, Item *right)
 {
   if ((left->used_tables() & ctx->usable_tables) &&
       !(right->used_tables() & RAND_TABLE_BIT) &&
       left->real_item()->type() == Item::FIELD_ITEM)
   {
     Field *field= ((Item_field*)left->real_item())->field;
-    if (!field->can_optimize_outer_join_table_elimination(cond, right))
+    if (right->cmp_type() == TIME_RESULT && field->cmp_type() != TIME_RESULT)
       return;
+    if (field->result_type() == STRING_RESULT)
+    {
+      if (right->result_type() != STRING_RESULT)
+      {
+        if (field->cmp_type() != right->result_type())
+          return;
+      }
+      else
+      {
+        /*
+          We can't assume there's a functional dependency if the effective
+          collation of the operation differ from the field collation.
+        */
+        if ((field->cmp_type() == STRING_RESULT ||
+            field->real_type() == MYSQL_TYPE_ENUM ||
+            field->real_type() == MYSQL_TYPE_SET) &&
+            field->charset() != cond->compare_collation())
+          return;
+      }
+    }
     Dep_value_field *field_val;
     if ((field_val= ctx->get_field_value(field)))
       add_module_expr(ctx, eq_mod, and_level, field_val, right, NULL);

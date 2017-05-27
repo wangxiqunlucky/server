@@ -1,6 +1,5 @@
 drop database if exists mysqltest;
 drop view if exists v1,v2,v3;
-create user test@localhost;
 grant create view on test.* to test@localhost;
 show grants for test@localhost;
 Grants for test@localhost
@@ -14,7 +13,6 @@ drop user test@localhost;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int);
 create table mysqltest.t2 (a int, b int);
-create user mysqltest_1@localhost;
 grant select on mysqltest.t1 to mysqltest_1@localhost;
 grant create view,select on test.* to mysqltest_1@localhost;
 create definer=root@localhost view v1 as select * from mysqltest.t1;
@@ -48,19 +46,18 @@ c
 select d from mysqltest.v1;
 ERROR 42000: SELECT command denied to user 'mysqltest_1'@'localhost' for column 'd' in table 'v1'
 revoke all privileges on mysqltest.v1 from mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
+delete from mysql.user where user='mysqltest_1';
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int);
 create algorithm=temptable view mysqltest.v1 (c,d) as select a+1,b+1 from mysqltest.t1;
-create user mysqltest_1@localhost;
 grant select (c) on mysqltest.v1 to mysqltest_1@localhost;
 select c from mysqltest.v1;
 c
 select d from mysqltest.v1;
 ERROR 42000: SELECT command denied to user 'mysqltest_1'@'localhost' for column 'd' in table 'v1'
 revoke all privileges on mysqltest.v1 from mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
+delete from mysql.user where user='mysqltest_1';
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int);
@@ -70,7 +67,6 @@ create algorithm=temptable view mysqltest.v2 (c,d) as select a+1,b+1 from mysqlt
 create view mysqltest.v3 (c,d) as select a+1,b+1 from mysqltest.t2;
 create algorithm=temptable view mysqltest.v4 (c,d) as select a+1,b+1 from mysqltest.t2;
 create view mysqltest.v5 (c,d) as select a+1,b+1 from mysqltest.t1;
-create user mysqltest_1@localhost;
 grant select on mysqltest.v1 to mysqltest_1@localhost;
 grant select on mysqltest.v2 to mysqltest_1@localhost;
 grant select on mysqltest.v3 to mysqltest_1@localhost;
@@ -95,19 +91,19 @@ Field	Type	Null	Key	Default	Extra
 c	bigint(12)	YES		NULL	
 d	bigint(12)	YES		NULL	
 explain select c from mysqltest.v1;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v1;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v1'
 explain select c from mysqltest.v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v2;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v2'
 explain select c from mysqltest.v3;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v3;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v3'
 explain select c from mysqltest.v4;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v4;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v4'
 explain select c from mysqltest.v5;
@@ -119,7 +115,7 @@ show create view mysqltest.v5;
 View	Create View	character_set_client	collation_connection
 v5	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `mysqltest`.`v5` AS select (`mysqltest`.`t1`.`a` + 1) AS `c`,(`mysqltest`.`t1`.`b` + 1) AS `d` from `mysqltest`.`t1`	latin1	latin1_swedish_ci
 explain select c from mysqltest.v1;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v1;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v1'
 grant show view on mysqltest.v1 to mysqltest_1@localhost;
@@ -132,15 +128,15 @@ show create view mysqltest.v1;
 View	Create View	character_set_client	collation_connection
 v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `mysqltest`.`v1` AS select (`mysqltest`.`t1`.`a` + 1) AS `c`,(`mysqltest`.`t1`.`b` + 1) AS `d` from `mysqltest`.`t1`	latin1	latin1_swedish_ci
 explain select c from mysqltest.v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v2;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v2'
 explain select c from mysqltest.v3;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v3;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v3'
 explain select c from mysqltest.v4;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v4;
 ERROR 42000: SHOW VIEW command denied to user 'mysqltest_1'@'localhost' for table 'v4'
 explain select c from mysqltest.v5;
@@ -160,17 +156,17 @@ show create view mysqltest.v2;
 View	Create View	character_set_client	collation_connection
 v2	CREATE ALGORITHM=TEMPTABLE DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `mysqltest`.`v2` AS select (`mysqltest`.`t1`.`a` + 1) AS `c`,(`mysqltest`.`t1`.`b` + 1) AS `d` from `mysqltest`.`t1`	latin1	latin1_swedish_ci
 explain select c from mysqltest.v3;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v3;
 View	Create View	character_set_client	collation_connection
 v3	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `mysqltest`.`v3` AS select (`mysqltest`.`t2`.`a` + 1) AS `c`,(`mysqltest`.`t2`.`b` + 1) AS `d` from `mysqltest`.`t2`	latin1	latin1_swedish_ci
 explain select c from mysqltest.v4;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 show create view mysqltest.v4;
 View	Create View	character_set_client	collation_connection
 v4	CREATE ALGORITHM=TEMPTABLE DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `mysqltest`.`v4` AS select (`mysqltest`.`t2`.`a` + 1) AS `c`,(`mysqltest`.`t2`.`b` + 1) AS `d` from `mysqltest`.`t2`	latin1	latin1_swedish_ci
 revoke all privileges on mysqltest.* from mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
+delete from mysql.user where user='mysqltest_1';
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int, primary key(a));
@@ -180,7 +176,6 @@ insert into mysqltest.t2 values (3), (4), (5), (6);
 create view mysqltest.v1 (a,c) as select a, b+1 from mysqltest.t1;
 create view mysqltest.v2 (a,c) as select a, b from mysqltest.t1;
 create view mysqltest.v3 (a,c) as select a, b+1 from mysqltest.t1;
-create user mysqltest_1@localhost;
 grant update (a) on mysqltest.v2 to mysqltest_1@localhost;
 grant update on mysqltest.v1 to mysqltest_1@localhost;
 grant select on mysqltest.* to mysqltest_1@localhost;
@@ -227,7 +222,6 @@ update v3 set a=a+c;
 ERROR 42000: UPDATE command denied to user 'mysqltest_1'@'localhost' for table 'v3'
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int, primary key(a));
@@ -236,7 +230,6 @@ create table mysqltest.t2 (x int);
 insert into mysqltest.t2 values (3), (4), (5), (6);
 create view mysqltest.v1 (a,c) as select a, b+1 from mysqltest.t1;
 create view mysqltest.v2 (a,c) as select a, b+1 from mysqltest.t1;
-create user mysqltest_1@localhost;
 grant delete on mysqltest.v1 to mysqltest_1@localhost;
 grant select on mysqltest.* to mysqltest_1@localhost;
 use mysqltest;
@@ -257,7 +250,6 @@ delete from v2 where c < 4;
 ERROR 42000: DELETE command denied to user 'mysqltest_1'@'localhost' for table 'v2'
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int, primary key(a));
@@ -266,7 +258,6 @@ create table mysqltest.t2 (x int, y int);
 insert into mysqltest.t2 values (3,4);
 create view mysqltest.v1 (a,c) as select a, b from mysqltest.t1;
 create view mysqltest.v2 (a,c) as select a, b from mysqltest.t1;
-create user mysqltest_1@localhost;
 grant insert on mysqltest.v1 to mysqltest_1@localhost;
 grant select on mysqltest.* to mysqltest_1@localhost;
 use mysqltest;
@@ -289,12 +280,10 @@ insert into v2 select x,y from t2;
 ERROR 42000: INSERT command denied to user 'mysqltest_1'@'localhost' for table 'v2'
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int);
 create table mysqltest.t2 (a int, b int);
-create user mysqltest_1@localhost;
 grant update on mysqltest.t1 to mysqltest_1@localhost;
 grant update(b) on mysqltest.t2 to mysqltest_1@localhost;
 grant create view,update on test.* to mysqltest_1@localhost;
@@ -319,22 +308,18 @@ ERROR 42000: SELECT command denied to user 'mysqltest_1'@'localhost' for column 
 grant update,select(b) on mysqltest.t2 to mysqltest_1@localhost;
 create view v4 as select b+1 from mysqltest.t2;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 drop view v1,v2,v4;
 create database mysqltest;
 create table mysqltest.t1 (a int);
-create user mysqltest_1@localhost;
 grant all privileges on mysqltest.* to mysqltest_1@localhost;
 use mysqltest;
 create view v1 as select * from t1;
 use test;
 revoke all privileges on mysqltest.* from mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 create table mysqltest.t1 (a int, b int);
-create user mysqltest_1@localhost;
 grant select on mysqltest.t1 to mysqltest_1@localhost;
 grant create view,select on test.* to mysqltest_1@localhost;
 create view v1 as select * from mysqltest.t1;
@@ -348,7 +333,6 @@ grant select on mysqltest.t1 to mysqltest_1@localhost;
 select * from v1;
 a	b
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop view v1;
 drop database mysqltest;
 create database mysqltest;
@@ -364,7 +348,6 @@ create algorithm=MERGE view v2 as select f2() from t1;
 create algorithm=TEMPTABLE SQL SECURITY INVOKER view v3 as select f2() from t1;
 create algorithm=MERGE SQL SECURITY INVOKER view v4 as select f2() from t1;
 create SQL SECURITY INVOKER view v5 as select * from v4;
-create user mysqltest_1@localhost;
 grant select on v1 to mysqltest_1@localhost;
 grant select on v2 to mysqltest_1@localhost;
 grant select on v3 to mysqltest_1@localhost;
@@ -389,7 +372,6 @@ drop function f2;
 drop table t1, t2;
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 use mysqltest;
@@ -399,7 +381,6 @@ create table t2 (s1 int);
 drop function if exists f2;
 create function f2 () returns int begin declare v int; select s1 from t2
 into v; return v; end//
-create user mysqltest_1@localhost;
 grant select on t1 to mysqltest_1@localhost;
 grant execute on function f2 to mysqltest_1@localhost;
 grant create view on mysqltest.* to mysqltest_1@localhost;
@@ -428,14 +409,12 @@ drop function f2;
 drop table t1, t2;
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 use mysqltest;
 create table t1 (a int);
 create table v1 (a int);
 insert into t1 values (1);
-create user mysqltest_1@localhost;
 grant select on t1 to mysqltest_1@localhost;
 grant select on v1 to mysqltest_1@localhost;
 grant create view on mysqltest.* to mysqltest_1@localhost;
@@ -463,7 +442,6 @@ ERROR HY000: View 'mysqltest.v5' references invalid table(s) or column(s) or fun
 drop table t1;
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 create database mysqltest;
 use mysqltest;
@@ -474,7 +452,6 @@ create algorithm=MERGE view v2 as select *, a as b from t1;
 create algorithm=TEMPTABLE SQL SECURITY INVOKER view v3 as select *, a as b from t1;
 create algorithm=MERGE SQL SECURITY INVOKER view v4 as select *, a as b from t1;
 create SQL SECURITY INVOKER view v5 as select * from v4;
-create user mysqltest_1@localhost;
 grant select on v1 to mysqltest_1@localhost;
 grant select on v2 to mysqltest_1@localhost;
 grant select on v3 to mysqltest_1@localhost;
@@ -498,14 +475,12 @@ drop view v1, v2, v3, v4, v5;
 drop table t1;
 use test;
 REVOKE ALL PRIVILEGES, GRANT OPTION FROM mysqltest_1@localhost;
-drop user mysqltest_1@localhost;
 drop database mysqltest;
 drop view if exists v1;
 drop table if exists t1;
 create table t1 as select * from mysql.user where user='';
 delete from mysql.user where user='';
 flush privileges;
-create user 'test14256'@'%';
 grant all on test.* to 'test14256'@'%';
 use test;
 create view v1 as select 42;
@@ -536,7 +511,6 @@ CREATE VIEW  v1 AS SELECT * FROM t1;
 SHOW CREATE VIEW v1;
 View	Create View	character_set_client	collation_connection
 v1	CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v1` AS select `t1`.`i` AS `i` from `t1`	latin1	latin1_swedish_ci
-create user mysqltest_1@localhost;
 GRANT SELECT, LOCK TABLES ON mysqltest.* TO mysqltest_1@localhost;
 use mysqltest;
 LOCK TABLES v1 READ;
@@ -879,7 +853,6 @@ INSERT INTO mysqltest1.t1 VALUES (11), (12), (13), (14);
 INSERT INTO mysqltest1.t2 VALUES (21), (22), (23), (24);
 INSERT INTO mysqltest1.t3 VALUES (31), (32), (33), (34);
 INSERT INTO mysqltest1.t4 VALUES (41), (42), (43), (44);
-CREATE USER mysqltest_u1@localhost;
 GRANT SELECT ON mysqltest1.t1 TO mysqltest_u1@localhost;
 GRANT INSERT ON mysqltest1.t2 TO mysqltest_u1@localhost;
 GRANT SELECT, UPDATE ON mysqltest1.t3 TO mysqltest_u1@localhost;
@@ -960,7 +933,6 @@ CREATE DATABASE db1;
 USE db1;
 CREATE TABLE t1(f1 INT, f2 INT);
 CREATE VIEW v1 AS SELECT f1, f2 FROM t1;
-CREATE USER foo;
 GRANT SELECT (f1) ON t1 TO foo;
 GRANT SELECT (f1) ON v1 TO foo;
 USE db1;
@@ -1055,7 +1027,7 @@ grant select, show view on mysqltest1.v1 to quintessa@localhost;
 select * from v1;
 i
 explain select * from v1;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as cecil
 select * from v1;
 ERROR 42000: SELECT command denied to user 'cecil'@'localhost' for table 'v1'
@@ -1071,7 +1043,7 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 select * from v1;
 i
 explain select * from v1;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as fiona
 select * from v2;
 i	j
@@ -1085,14 +1057,14 @@ ERROR 42000: SELECT command denied to user 'fiona'@'localhost' for table 'v1'
 explain select * from t2;
 ERROR 42000: SELECT command denied to user 'fiona'@'localhost' for table 't2'
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as greg
 select * from v2;
 i	j
 explain select * from v1;
 ERROR 42000: SELECT command denied to user 'greg'@'localhost' for table 'v1'
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as han
 select * from t3;
 ERROR 42000: SELECT command denied to user 'han'@'localhost' for table 't3'
@@ -1112,17 +1084,17 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as jamie
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as karl
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as lena
 select * from v2;
 ERROR 42000: SELECT command denied to user 'lena'@'localhost' for table 'v2'
@@ -1139,22 +1111,22 @@ id	select_type	table	type	possible_keys	key	key_len	ref	rows	Extra
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as olga
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as pjotr
 select * from v2;
 i	j
 explain select * from v2;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as quintessa
 select * from v1;
 i
 explain select * from v1;
-ERROR HY000: ANALYZE/EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
+ERROR HY000: EXPLAIN/SHOW can not be issued; lacking privileges for underlying table
 ... as root again at last: clean-up time!
 drop user alice@localhost;
 drop user bob@localhost;

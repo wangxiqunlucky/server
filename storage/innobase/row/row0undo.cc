@@ -363,7 +363,8 @@ row_undo_step(
 				"InnoDB: Out of tablespace.\n"
 				"InnoDB: Consider increasing"
 				" your tablespace.\n");
-			abort();
+
+			exit(1);
 		}
 
 		ut_error;

@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Describe, check and repair of MARIA tables */
 
@@ -1120,7 +1120,7 @@ static int maria_chk(HA_CHECK *param, char *filename)
        maria_test_if_almost_full(info) ||
        info->s->state.header.file_version[3] != maria_file_magic[3] ||
        (set_collation &&
-        set_collation->number != share->base.language)))
+        set_collation->number != share->state.header.language)))
   {
     if (set_collation)
       param->language= set_collation->number;
@@ -1507,8 +1507,8 @@ static void descript(HA_CHECK *param, register MARIA_HA *info, char *name)
   printf("Crashsafe:           %s\n",
          share->base.born_transactional ? "yes" : "no");
   printf("Character set:       %s (%d)\n",
-	 get_charset_name(share->base.language),
-         (int) share->base.language);
+	 get_charset_name(share->state.header.language),
+	 share->state.header.language);
 
   if (param->testflag & T_VERBOSE)
   {

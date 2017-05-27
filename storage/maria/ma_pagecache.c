@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   These functions handle page caching for Maria tables.
@@ -493,7 +493,8 @@ error:
 
 #define FLUSH_CACHE         2000            /* sort this many blocks at once */
 
-static void free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block);
+static my_bool free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block,
+                          my_bool abort_if_pinned);
 static void unlink_hash(PAGECACHE *pagecache, PAGECACHE_HASH_LINK *hash_link);
 #ifndef DBUG_OFF
 static void test_key_cache(PAGECACHE *pagecache,
@@ -625,8 +626,6 @@ static my_bool pagecache_fwrite(PAGECACHE *pagecache,
                                 __attribute__((unused)),
                                 myf flags)
 {
-  int res;
-  PAGECACHE_IO_HOOK_ARGS args;
   DBUG_ENTER("pagecache_fwrite");
   DBUG_ASSERT(type != PAGECACHE_READ_UNKNOWN_PAGE);
 
@@ -650,26 +649,24 @@ static my_bool pagecache_fwrite(PAGECACHE *pagecache,
   }
 #endif
 
-  /* initialize hooks args */
-  args.page= buffer;
-  args.pageno= pageno;
-  args.data= filedesc->callback_data;
-
   /* Todo: Integrate this with write_callback so we have only one callback */
-  if ((*filedesc->flush_log_callback)(&args))
+  if ((*filedesc->flush_log_callback)(buffer, pageno, filedesc->callback_data))
     DBUG_RETURN(1);
-  DBUG_PRINT("info", ("pre_write_hook: 0x%lx  data: 0x%lx",
-                      (ulong) filedesc->pre_write_hook,
+  DBUG_PRINT("info", ("write_callback: 0x%lx  data: 0x%lx",
+                      (ulong) filedesc->write_callback,
                       (ulong) filedesc->callback_data));
-  if ((*filedesc->pre_write_hook)(&args))
+  if ((*filedesc->write_callback)(buffer, pageno, filedesc->callback_data))
   {
     DBUG_PRINT("error", ("write callback problem"));
     DBUG_RETURN(1);
   }
-  res= my_pwrite(filedesc->file, args.page, pagecache->block_size,
-                 ((my_off_t) pageno << pagecache->shift), flags);
-  (*filedesc->post_write_hook)(res, &args);
-  DBUG_RETURN(res);
+  if (my_pwrite(filedesc->file, buffer, pagecache->block_size,
+                ((my_off_t) pageno << pagecache->shift), flags))
+  {
+    (*filedesc->write_fail)(filedesc->callback_data);
+    DBUG_RETURN(1);
+  }
+  DBUG_RETURN(0);
 }
 
 
@@ -1943,7 +1940,7 @@ restart:
         removed from the cache as we set the PCBLOCK_REASSIGNED
         flag (see the code below that handles reading requests).
       */
-      free_block(pagecache, block);
+      free_block(pagecache, block, 0);
       return 0;
     }
     /* Wait until the page is flushed on disk */
@@ -1954,7 +1951,7 @@ restart:
     /* Invalidate page in the block if it has not been done yet */
     DBUG_ASSERT(block->status);                 /* Should always be true */
     if (block->status)
-      free_block(pagecache, block);
+      free_block(pagecache, block, 0);
     return 0;
   }
 
@@ -1979,8 +1976,13 @@ restart:
     }
     else
     {
-      DBUG_ASSERT(hash_link->requests > 0);
-      hash_link->requests--;
+      /*
+        When we come here either PCBLOCK_REASSIGNED or PCBLOCK_IN_SWITCH are
+        active. In both cases wqueue_release_queue() is called when the
+        state changes.
+      */
+      DBUG_ASSERT(block->hash_link == hash_link);
+      remove_reader(block);
       KEYCACHE_DBUG_PRINT("find_block",
                           ("request waiting for old page to be saved"));
       {
@@ -2699,7 +2701,6 @@ static void read_block(PAGECACHE *pagecache,
   if (primary)
   {
     size_t error;
-    PAGECACHE_IO_HOOK_ARGS args;
     /*
       This code is executed only by threads
       that submitted primary requests
@@ -2712,18 +2713,10 @@ static void read_block(PAGECACHE *pagecache,
       They will register in block->wqueue[COND_FOR_REQUESTED].
     */
     pagecache_pthread_mutex_unlock(&pagecache->cache_lock);
-    args.page= block->buffer;
-    args.pageno= block->hash_link->pageno;
-    args.data= block->hash_link->file.callback_data;
-    error= (*block->hash_link->file.pre_read_hook)(&args);
-    if (!error)
-    {
-      error= pagecache_fread(pagecache, &block->hash_link->file,
-                             args.page,
-                             block->hash_link->pageno,
-                             pagecache->readwrite_flags);
-    }
-    error= (*block->hash_link->file.post_read_hook)(error != 0, &args);
+    error= pagecache_fread(pagecache, &block->hash_link->file,
+                           block->buffer,
+                           block->hash_link->pageno,
+                           pagecache->readwrite_flags);
     pagecache_pthread_mutex_lock(&pagecache->cache_lock);
     if (error)
     {
@@ -2735,6 +2728,16 @@ static void read_block(PAGECACHE *pagecache,
     else
     {
       block->status|= PCBLOCK_READ;
+      if ((*block->hash_link->file.read_callback)(block->buffer,
+                                                  block->hash_link->pageno,
+                                                  block->hash_link->
+                                                  file.callback_data))
+      {
+        DBUG_PRINT("error", ("read callback problem"));
+        block->status|= PCBLOCK_ERROR;
+        block->error=  (int16) my_errno;
+        my_debug_put_break_here();
+      }
     }
     DBUG_PRINT("read_block",
                ("primary request: new page in cache"));
@@ -3376,7 +3379,8 @@ restart:
     /* Key cache is used */
     PAGECACHE_BLOCK_LINK *block;
     uint status;
-    int UNINIT_VAR(page_st);
+    int page_st;
+    LINT_INIT(page_st);
 
     pagecache_pthread_mutex_lock(&pagecache->cache_lock);
     if (!pagecache->can_be_used)
@@ -3512,21 +3516,9 @@ no_key_cache:					/* Key cache is not used */
   /* We can't use mutex here as the key cache may not be initialized */
   pagecache->global_cache_r_requests++;
   pagecache->global_cache_read++;
-
-  {
-    PAGECACHE_IO_HOOK_ARGS args;
-    args.page= buff;
-    args.pageno= pageno;
-    args.data= file->callback_data;
-    error= (* file->pre_read_hook)(&args);
-    if (!error)
-    {
-      error= pagecache_fread(pagecache, file, args.page, pageno,
-                             pagecache->readwrite_flags) != 0;
-    }
-    error= (* file->post_read_hook)(error, &args);
-  }
-
+  if (pagecache_fread(pagecache, file, buff, pageno,
+                      pagecache->readwrite_flags))
+    error= 1;
   DBUG_RETURN(error ? (uchar*) 0 : buff);
 }
 
@@ -3617,16 +3609,17 @@ static my_bool pagecache_delete_internal(PAGECACHE *pagecache,
     }
     else
     {
-      PAGECACHE_IO_HOOK_ARGS args;
       PAGECACHE_FILE *filedesc= &block->hash_link->file;
-      args.page= block->buffer;
-      args.pageno= block->hash_link->pageno;
-      args.data= filedesc->callback_data;
       /* We are not going to write the page but have to call callbacks */
-      DBUG_PRINT("info", ("flush_callback :0x%lx data: 0x%lx",
+      DBUG_PRINT("info", ("flush_callback :0x%lx"
+                          "write_callback: 0x%lx  data: 0x%lx",
                           (ulong) filedesc->flush_log_callback,
+                          (ulong) filedesc->write_callback,
                           (ulong) filedesc->callback_data));
-      if ((*filedesc->flush_log_callback)(&args))
+      if ((*filedesc->flush_log_callback)
+          (block->buffer, block->hash_link->pageno, filedesc->callback_data) ||
+          (*filedesc->write_callback)
+          (block->buffer, block->hash_link->pageno, filedesc->callback_data))
       {
         DBUG_PRINT("error", ("flush or write callback problem"));
         error= 1;
@@ -3648,7 +3641,7 @@ static my_bool pagecache_delete_internal(PAGECACHE *pagecache,
   DBUG_ASSERT(block->hash_link->requests > 0);
   page_link->requests--;
   /* See NOTE for pagecache_unlock() about registering requests. */
-  free_block(pagecache, block);
+  free_block(pagecache, block, 0);
   dec_counter_for_resize_op(pagecache);
   return 0;
 
@@ -4096,6 +4089,23 @@ restart:
         /* Copy data from buff */
         memcpy(block->buffer + offset, buff, size);
         block->status= PCBLOCK_READ;
+        /*
+          The read_callback can change the page content (removing page
+          protection) so it have to be called
+        */
+        DBUG_PRINT("info", ("read_callback: 0x%lx  data: 0x%lx",
+                            (ulong) block->hash_link->file.read_callback,
+                            (ulong) block->hash_link->file.callback_data));
+        if ((*block->hash_link->file.read_callback)(block->buffer,
+                                                    block->hash_link->pageno,
+                                                    block->hash_link->
+                                                    file.callback_data))
+        {
+          DBUG_PRINT("error", ("read callback problem"));
+          block->status|= PCBLOCK_ERROR;
+          block->error= (int16) my_errno;
+          my_debug_put_break_here();
+        }
         KEYCACHE_DBUG_PRINT("key_cache_insert",
                             ("Page injection"));
         /* Signal that all pending requests for this now can be processed. */
@@ -4183,21 +4193,14 @@ no_key_cache:
     if (offset != 0 || size != pagecache->block_size)
     {
       uchar *page_buffer= (uchar *) alloca(pagecache->block_size);
-      PAGECACHE_IO_HOOK_ARGS args;
-      args.page= page_buffer;
-      args.pageno= pageno;
-      args.data= file->callback_data;
 
       pagecache->global_cache_read++;
-      error= (*file->pre_read_hook)(&args);
-      if (!error)
-      {
-        error= pagecache_fread(pagecache, file,
-                               page_buffer,
-                               pageno,
-                               pagecache->readwrite_flags) != 0;
-      }
-      if ((*file->post_read_hook)(error, &args))
+      if ((error= (pagecache_fread(pagecache, file,
+                                   page_buffer,
+                                   pageno,
+                                   pagecache->readwrite_flags) != 0)))
+        goto end;
+      if ((file->read_callback)(page_buffer, pageno, file->callback_data))
       {
         DBUG_PRINT("error", ("read callback problem"));
         error= 1;
@@ -4230,7 +4233,8 @@ end:
   and add it to the free list.
 */
 
-static void free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block)
+static my_bool free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block,
+                          my_bool abort_if_pinned)
 {
   uint status= block->status;
   KEYCACHE_THREAD_TRACE("free block");
@@ -4244,11 +4248,27 @@ static void free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block)
     /*
       While waiting for readers to finish, new readers might request the
       block. But since we set block->status|= PCBLOCK_REASSIGNED, they
-      will wait on block->wqueue[COND_FOR_SAVED]. They must be signalled
+      will wait on block->wqueue[COND_FOR_SAVED]. They must be signaled
       later.
     */
     block->status|= PCBLOCK_REASSIGNED;
     wait_for_readers(pagecache, block);
+    if (unlikely(abort_if_pinned) && unlikely(block->pins))
+    {
+      /*
+        Block got pinned while waiting for readers.
+        This can only happens when called from flush_pagecache_blocks_int()
+        when flushing blocks as part of prepare for maria_close() or from
+        flush_cached_blocks()
+      */
+      block->status&= ~PCBLOCK_REASSIGNED;
+      unreg_request(pagecache, block, 0);
+
+      /* All pending requests for this page must be resubmitted. */
+      if (block->wqueue[COND_FOR_SAVED].last_thread)
+        wqueue_release_queue(&block->wqueue[COND_FOR_SAVED]);
+      return 1;
+    }
     unlink_hash(pagecache, block->hash_link);
   }
 
@@ -4299,6 +4319,8 @@ static void free_block(PAGECACHE *pagecache, PAGECACHE_BLOCK_LINK *block)
   /* All pending requests for this page must be resubmitted. */
   if (block->wqueue[COND_FOR_SAVED].last_thread)
     wqueue_release_queue(&block->wqueue[COND_FOR_SAVED]);
+
+  return 0;
 }
 
 
@@ -4434,9 +4456,16 @@ static int flush_cached_blocks(PAGECACHE *pagecache,
     if (! (type == FLUSH_KEEP || type == FLUSH_KEEP_LAZY ||
            type == FLUSH_FORCE_WRITE))
     {
-      pagecache->blocks_changed--;
-      pagecache->global_blocks_changed--;
-      free_block(pagecache, block);
+      if (!free_block(pagecache, block, 1))
+      {
+        pagecache->blocks_changed--;
+        pagecache->global_blocks_changed--;
+      }
+      else
+      {
+        block->status&= ~PCBLOCK_IN_FLUSH;
+        link_to_file_list(pagecache, block, file, 1);
+      }
     }
     else
     {
@@ -4674,7 +4703,7 @@ restart:
             /* It's a temporary file */
             pagecache->blocks_changed--;
 	    pagecache->global_blocks_changed--;
-            free_block(pagecache, block);
+            free_block(pagecache, block, 0);
           }
         }
         else if (type != FLUSH_KEEP_LAZY)
@@ -4744,11 +4773,12 @@ restart:
 #endif
         next= block->next_changed;
         if (block->hash_link->file.file == file->file &&
+            !block->pins &&
             (! (block->status & PCBLOCK_CHANGED)
              || type == FLUSH_IGNORE_CHANGED))
         {
           reg_requests(pagecache, block, 1);
-          free_block(pagecache, block);
+          free_block(pagecache, block, 1);
         }
       }
     }
@@ -5260,37 +5290,3 @@ void pagecache_debug_log_close(void)
 #endif /* defined(PAGECACHE_DEBUG_LOG) */
 
 #endif /* defined(PAGECACHE_DEBUG) */
-
-/**
-  @brief null hooks
-*/
-
-static my_bool null_pre_hook(PAGECACHE_IO_HOOK_ARGS *args
-                             __attribute__((unused)))
-{
-  return 0;
-}
-
-static my_bool null_post_read_hook(int res, PAGECACHE_IO_HOOK_ARGS *args
-                                   __attribute__((unused)))
-{
-  return res != 0;
-}
-
-static void null_post_write_hook(int res __attribute__((unused)),
-                                 PAGECACHE_IO_HOOK_ARGS *args
-                                 __attribute__((unused)))
-{
-  return;
-}
-
-void
-pagecache_file_set_null_hooks(PAGECACHE_FILE *file)
-{
-  file->pre_read_hook= null_pre_hook;
-  file->post_read_hook= null_post_read_hook;
-  file->pre_write_hook= null_pre_hook;
-  file->post_write_hook= null_post_write_hook;
-  file->flush_log_callback= null_pre_hook;
-  file->callback_data= NULL;
-}

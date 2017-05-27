@@ -259,8 +259,8 @@ void
 mutex_create_func(
 /*==============*/
 	ib_mutex_t*	mutex,		/*!< in: pointer to memory */
-	const char*	cmutex_name,	/*!< in: mutex name */
 #ifdef UNIV_DEBUG
+	const char*	cmutex_name,	/*!< in: mutex name */
 # ifdef UNIV_SYNC_DEBUG
 	ulint		level,		/*!< in: level */
 # endif /* UNIV_SYNC_DEBUG */
@@ -279,16 +279,14 @@ mutex_create_func(
 #ifdef UNIV_DEBUG
 	mutex->magic_n = MUTEX_MAGIC_N;
 #endif /* UNIV_DEBUG */
-
+#ifdef UNIV_SYNC_DEBUG
 	mutex->line = 0;
 	mutex->file_name = "not yet reserved";
-#ifdef UNIV_SYNC_DEBUG
 	mutex->level = level;
 #endif /* UNIV_SYNC_DEBUG */
 	mutex->cfile_name = cfile_name;
 	mutex->cline = cline;
 	mutex->count_os_wait = 0;
-        mutex->cmutex_name = cmutex_name;
 
 	/* Check that lock_word is aligned; this is important on Intel */
 	ut_ad(((ulint)(&(mutex->lock_word))) % 4 == 0);
@@ -394,15 +392,11 @@ mutex_enter_nowait_func(
 
 	if (!ib_mutex_test_and_set(mutex)) {
 
-		mutex->thread_id = os_thread_get_curr_id();
+		ut_d(mutex->thread_id = os_thread_get_curr_id());
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(mutex, file_name, line);
-#else
-		if (srv_instrument_semaphores) {
-			mutex->file_name = file_name;
-			mutex->line = line;
-		}
 #endif
+
 		return(0);	/* Succeeded! */
 	}
 
@@ -420,13 +414,7 @@ mutex_validate(
 	const ib_mutex_t*	mutex)	/*!< in: mutex */
 {
 	ut_a(mutex);
-
-	if (mutex->magic_n != MUTEX_MAGIC_N) {
-		ib_logf(IB_LOG_LEVEL_ERROR,
-			"Mutex %p not initialized file %s line %lu.",
-			mutex, mutex->cfile_name, mutex->cline);
-	}
-	ut_ad(mutex->magic_n == MUTEX_MAGIC_N);
+	ut_a(mutex->magic_n == MUTEX_MAGIC_N);
 
 	return(TRUE);
 }
@@ -526,15 +514,10 @@ spin_loop:
 	if (ib_mutex_test_and_set(mutex) == 0) {
 		/* Succeeded! */
 
-		mutex->thread_id = os_thread_get_curr_id();
+		ut_d(mutex->thread_id = os_thread_get_curr_id());
 #ifdef UNIV_SYNC_DEBUG
 		mutex_set_debug_info(mutex, file_name, line);
 #endif
-		if (srv_instrument_semaphores) {
-			mutex->file_name = file_name;
-			mutex->line = line;
-		}
-
 		return;
 	}
 
@@ -574,14 +557,10 @@ spin_loop:
 
 			sync_array_free_cell(sync_arr, index);
 
-			mutex->thread_id = os_thread_get_curr_id();
+			ut_d(mutex->thread_id = os_thread_get_curr_id());
 #ifdef UNIV_SYNC_DEBUG
 			mutex_set_debug_info(mutex, file_name, line);
 #endif
-			if (srv_instrument_semaphores) {
-				mutex->file_name = file_name;
-				mutex->line = line;
-			}
 
 			return;
 
@@ -1144,6 +1123,7 @@ sync_thread_add_level(
 			upgrading in innobase_start_or_create_for_mysql(). */
 			break;
 		}
+		/* fall through */
 	case SYNC_MEM_POOL:
 	case SYNC_MEM_HASH:
 	case SYNC_RECV:
@@ -1176,7 +1156,6 @@ sync_thread_add_level(
 	case SYNC_IBUF_MUTEX:
 	case SYNC_INDEX_ONLINE_LOG:
 	case SYNC_STATS_AUTO_RECALC:
-	case SYNC_STATS_DEFRAG:
 		if (!sync_thread_levels_g(array, level, TRUE)) {
 			fprintf(stderr,
 				"InnoDB: sync_thread_levels_g(array, %lu)"

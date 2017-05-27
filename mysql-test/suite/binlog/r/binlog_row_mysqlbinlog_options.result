@@ -40,8 +40,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -51,7 +50,7 @@ use `new_test1`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=#/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1342177280/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -65,8 +64,8 @@ CREATE TABLE t1 (a INT, b INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -82,7 +81,7 @@ SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -96,8 +95,8 @@ CREATE TABLE t2 (a INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -116,8 +115,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test1`.`t1`
 ### WHERE
@@ -129,7 +128,7 @@ SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 use `new_test3`/*!*/;
@@ -143,8 +142,8 @@ CREATE TABLE t3 (a INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test3`.`t3`
 ### SET
@@ -163,8 +162,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -181,8 +180,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -215,8 +214,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test3`.`t3`
 ### WHERE
@@ -252,8 +251,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -263,7 +261,7 @@ use `new_test1`/*!*/;
 SET TIMESTAMP=1000000000/*!*/;
 SET @@session.pseudo_thread_id=#/*!*/;
 SET @@session.foreign_key_checks=1, @@session.sql_auto_is_null=0, @@session.unique_checks=1, @@session.autocommit=1/*!*/;
-SET @@session.sql_mode=1342177280/*!*/;
+SET @@session.sql_mode=0/*!*/;
 SET @@session.auto_increment_increment=1, @@session.auto_increment_offset=1/*!*/;
 /*!\C latin1 *//*!*/;
 SET @@session.character_set_client=8,@@session.collation_connection=8,@@session.collation_server=8/*!*/;
@@ -277,8 +275,8 @@ CREATE TABLE t1 (a INT, b INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -294,7 +292,7 @@ SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -308,8 +306,8 @@ CREATE TABLE t2 (a INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -328,8 +326,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test1`.`t1`
 ### WHERE
@@ -341,7 +339,7 @@ SET TIMESTAMP=1000000000/*!*/;
 COMMIT
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 use `new_test3`/*!*/;
@@ -355,8 +353,8 @@ CREATE TABLE t3 (a INT)
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test3`.`t3`
 ### SET
@@ -375,8 +373,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -393,8 +391,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `new_test1`.`t1`
 ### SET
@@ -427,8 +425,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `new_test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `new_test3`.`t3`
 ### WHERE

@@ -73,12 +73,10 @@ extern void *(*my_str_malloc)(size_t);
 extern void *(*my_str_realloc)(void *, size_t);
 extern void (*my_str_free)(void *);
 
-#ifdef DBUG_OFF
 #if defined(HAVE_STPCPY) && MY_GNUC_PREREQ(3, 4) && !defined(__INTEL_COMPILER)
 #define strmov(A,B) __builtin_stpcpy((A),(B))
 #elif defined(HAVE_STPCPY)
 #define strmov(A,B) stpcpy((A),(B))
-#endif
 #endif
 
 /* Declared in int2str() */
@@ -232,16 +230,5 @@ static inline void lex_string_set(LEX_STRING *lex_str, const char *c_str)
   lex_str->str= (char *) c_str;
   lex_str->length= strlen(c_str);
 }
-
-#ifdef __cplusplus
-static inline char *safe_str(char *str)
-{ return str ? str : const_cast<char*>(""); }
-#endif
-
-static inline const char *safe_str(const char *str)
-{ return str ? str : ""; }
-
-static inline size_t safe_strlen(const char *str)
-{ return str ? strlen(str) : 0; }
 
 #endif

@@ -231,7 +231,7 @@ a file name for --relay-log-index option", opt_relaylog_index_name);
     log_lock= rli->relay_log.get_log_lock();
     mysql_mutex_lock(log_lock);
     if (rli->relay_log.open_index_file(buf_relaylog_index_name, ln, TRUE) ||
-        rli->relay_log.open(ln, LOG_BIN, 0, 0, SEQ_READ_APPEND,
+        rli->relay_log.open(ln, LOG_BIN, 0, SEQ_READ_APPEND,
                             mi->rli.max_relay_log_size, 1, TRUE))
     {
       mysql_mutex_unlock(log_lock);
@@ -401,16 +401,24 @@ Failed to open the existing relay log info file '%s' (errno %d)",
                            0 /* no data lock*/,
                            &msg, 0))
     {
-      sql_print_error("Failed to open the relay log '%s' (relay_log_pos %llu)",
-                      rli->group_relay_log_name, rli->group_relay_log_pos);
+      char llbuf[22];
+      sql_print_error("Failed to open the relay log '%s' (relay_log_pos %s)",
+                      rli->group_relay_log_name,
+                      llstr(rli->group_relay_log_pos, llbuf));
       goto err;
     }
   }
 
-  DBUG_PRINT("info", ("my_b_tell(rli->cur_log)=%llu rli->event_relay_log_pos=%llu",
-                      my_b_tell(rli->cur_log), rli->event_relay_log_pos));
-  DBUG_ASSERT(rli->event_relay_log_pos >= BIN_LOG_HEADER_SIZE);
-  DBUG_ASSERT(my_b_tell(rli->cur_log) == rli->event_relay_log_pos);
+#ifndef DBUG_OFF
+  {
+    char llbuf1[22], llbuf2[22];
+    DBUG_PRINT("info", ("my_b_tell(rli->cur_log)=%s rli->event_relay_log_pos=%s",
+                        llstr(my_b_tell(rli->cur_log),llbuf1),
+                        llstr(rli->event_relay_log_pos,llbuf2)));
+    DBUG_ASSERT(rli->event_relay_log_pos >= BIN_LOG_HEADER_SIZE);
+    DBUG_ASSERT(my_b_tell(rli->cur_log) == rli->event_relay_log_pos);
+  }
+#endif
 
   /*
     Now change the cache from READ to WRITE - must do this
@@ -455,7 +463,10 @@ static inline int add_relay_log(Relay_log_info* rli,LOG_INFO* linfo)
     DBUG_RETURN(1);
   }
   rli->log_space_total += s.st_size;
-  DBUG_PRINT("info",("log_space_total: %llu", rli->log_space_total));
+#ifndef DBUG_OFF
+  char buf[22];
+  DBUG_PRINT("info",("log_space_total: %s", llstr(rli->log_space_total,buf)));
+#endif
   DBUG_RETURN(0);
 }
 
@@ -553,12 +564,9 @@ read_relay_log_description_event(IO_CACHE *cur_log, ulonglong start_pos,
     typ= ev->get_type_code();
     if (typ == FORMAT_DESCRIPTION_EVENT)
     {
-      Format_description_log_event *old= fdev;
       DBUG_PRINT("info",("found Format_description_log_event"));
+      delete fdev;
       fdev= (Format_description_log_event*) ev;
-      fdev->copy_crypto_data(old);
-      delete old;
-
       /*
         As ev was returned by read_log_event, it has passed is_valid(), so
         my_malloc() in ctor worked, no need to check again.
@@ -579,17 +587,6 @@ read_relay_log_description_event(IO_CACHE *cur_log, ulonglong start_pos,
         position (argument 'pos') or until you find another event than Rotate
         or Format_desc.
       */
-    }
-    else if (typ == START_ENCRYPTION_EVENT)
-    {
-      if (fdev->start_decryption((Start_encryption_log_event*) ev))
-      {
-        *errmsg= "Unable to set up decryption of binlog.";
-        delete ev;
-        delete fdev;
-        return NULL;
-      }
-      delete ev;
     }
     else
     {
@@ -734,8 +731,14 @@ int init_relay_log_pos(Relay_log_info* rli,const char* log,
       rli->relay_log.description_event_for_exec= fdev;
     }
     my_b_seek(rli->cur_log,(off_t)pos);
-    DBUG_PRINT("info", ("my_b_tell(rli->cur_log)=%llu rli->event_relay_log_pos=%llu",
-                        my_b_tell(rli->cur_log), rli->event_relay_log_pos));
+#ifndef DBUG_OFF
+  {
+    char llbuf1[22], llbuf2[22];
+    DBUG_PRINT("info", ("my_b_tell(rli->cur_log)=%s rli->event_relay_log_pos=%s",
+                        llstr(my_b_tell(rli->cur_log),llbuf1),
+                        llstr(rli->event_relay_log_pos,llbuf2)));
+  }
+#endif
 
   }
 
@@ -1023,7 +1026,7 @@ void Relay_log_info::inc_group_relay_log_pos(ulonglong log_pos,
     group_relay_log_pos= event_relay_log_pos;
     strmake_buf(group_relay_log_name, event_relay_log_name);
     notify_group_relay_log_name_update();
-    if (log_pos) // not 3.23 binlogs (no log_pos there) and not Stop_log_event
+    if (log_pos) // 3.23 binlogs don't have log_posx
       group_master_log_pos= log_pos;
   }
 
@@ -1090,9 +1093,6 @@ void Relay_log_info::close_temporary_tables()
 /*
   purge_relay_logs()
 
-  @param rli		Relay log information
-  @param thd		thread id. May be zero during startup
-
   NOTES
     Assumes to have a run lock on rli and that no slave thread are running.
 */
@@ -1148,7 +1148,7 @@ int purge_relay_logs(Relay_log_info* rli, THD *thd, bool just_reset,
     rli->cur_log_fd= -1;
   }
 
-  if (rli->relay_log.reset_logs(thd, !just_reset, NULL, 0, 0))
+  if (rli->relay_log.reset_logs(thd, !just_reset, NULL, 0))
   {
     *errmsg = "Failed during log reset";
     error=1;
@@ -1180,7 +1180,10 @@ int purge_relay_logs(Relay_log_info* rli, THD *thd, bool just_reset,
   }
 
 err:
-  DBUG_PRINT("info",("log_space_total: %llu",rli->log_space_total));
+#ifndef DBUG_OFF
+  char buf[22];
+#endif
+  DBUG_PRINT("info",("log_space_total: %s",llstr(rli->log_space_total,buf)));
   mysql_mutex_unlock(&rli->data_lock);
   DBUG_RETURN(error);
 }
@@ -1219,35 +1222,47 @@ err:
      false - condition not met
 */
 
-bool Relay_log_info::is_until_satisfied(my_off_t master_beg_pos)
+bool Relay_log_info::is_until_satisfied(THD *thd, Log_event *ev)
 {
   const char *log_name;
   ulonglong log_pos;
   DBUG_ENTER("Relay_log_info::is_until_satisfied");
 
+  DBUG_ASSERT(until_condition == UNTIL_MASTER_POS ||
+              until_condition == UNTIL_RELAY_POS);
+
   if (until_condition == UNTIL_MASTER_POS)
   {
-    log_name= (mi->using_parallel() ? future_event_master_log_name
-                                    : group_master_log_name);
-    log_pos= master_beg_pos;
+    if (ev && ev->server_id == (uint32) global_system_variables.server_id &&
+        !replicate_same_server_id)
+      DBUG_RETURN(FALSE);
+    log_name= (mi->using_parallel() ?
+               future_event_master_log_name : group_master_log_name);
+    log_pos= ((!ev)? group_master_log_pos :
+              (get_flag(IN_TRANSACTION) || !ev->log_pos) ?
+              group_master_log_pos : ev->log_pos - ev->data_written);
   }
   else
-  {
-    DBUG_ASSERT(until_condition == UNTIL_RELAY_POS);
+  { /* until_condition == UNTIL_RELAY_POS */
     log_name= group_relay_log_name;
     log_pos= group_relay_log_pos;
   }
 
-  DBUG_PRINT("info", ("group_master_log_name='%s', group_master_log_pos=%llu",
-                      group_master_log_name, group_master_log_pos));
-  DBUG_PRINT("info", ("group_relay_log_name='%s', group_relay_log_pos=%llu",
-                      group_relay_log_name, group_relay_log_pos));
-  DBUG_PRINT("info", ("(%s) log_name='%s', log_pos=%llu",
-                      until_condition == UNTIL_MASTER_POS ? "master" : "relay",
-                      log_name, log_pos));
-  DBUG_PRINT("info", ("(%s) until_log_name='%s', until_log_pos=%llu",
-                      until_condition == UNTIL_MASTER_POS ? "master" : "relay",
-                      until_log_name, until_log_pos));
+#ifndef DBUG_OFF
+  {
+    char buf[32];
+    DBUG_PRINT("info", ("group_master_log_name='%s', group_master_log_pos=%s",
+                        group_master_log_name, llstr(group_master_log_pos, buf)));
+    DBUG_PRINT("info", ("group_relay_log_name='%s', group_relay_log_pos=%s",
+                        group_relay_log_name, llstr(group_relay_log_pos, buf)));
+    DBUG_PRINT("info", ("(%s) log_name='%s', log_pos=%s",
+                        until_condition == UNTIL_MASTER_POS ? "master" : "relay",
+                        log_name, llstr(log_pos, buf)));
+    DBUG_PRINT("info", ("(%s) until_log_name='%s', until_log_pos=%s",
+                        until_condition == UNTIL_MASTER_POS ? "master" : "relay",
+                        until_log_name, llstr(until_log_pos, buf)));
+  }
+#endif
 
   if (until_log_names_cmp_result == UNTIL_LOG_NAMES_CMP_UNKNOWN)
   {
@@ -1398,6 +1413,7 @@ Relay_log_info::alloc_inuse_relaylog(const char *name)
     last_inuse_relaylog->next= ir;
   }
   last_inuse_relaylog= ir;
+  my_atomic_rwlock_init(&ir->inuse_relaylog_atomic_lock);
 
   return 0;
 }
@@ -1407,6 +1423,7 @@ void
 Relay_log_info::free_inuse_relaylog(inuse_relaylog *ir)
 {
   my_free(ir->relay_log_state);
+  my_atomic_rwlock_destroy(&ir->inuse_relaylog_atomic_lock);
   my_free(ir);
 }
 
@@ -1471,7 +1488,7 @@ rpl_load_gtid_slave_state(THD *thd)
     goto end;
   array_inited= true;
 
-  thd->reset_for_next_command();
+  mysql_reset_thd_for_next_command(thd);
 
   tlist.init_one_table(STRING_WITH_LEN("mysql"),
                        rpl_gtid_slave_state_table_name.str,
@@ -1634,10 +1651,8 @@ rpl_group_info::reinit(Relay_log_info *rli)
   row_stmt_start_timestamp= 0;
   long_find_row_note_printed= false;
   did_mark_start_commit= false;
-  gtid_ev_flags2= 0;
   last_master_timestamp = 0;
   gtid_ignore_duplicate_state= GTID_DUPLICATE_NULL;
-  speculation= SPECULATE_NO;
   commit_orderer.reinit();
 }
 

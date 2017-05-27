@@ -56,9 +56,7 @@ Created 9/17/2000 Heikki Tuuri
 #include "rem0cmp.h"
 #include "log0log.h"
 #include "btr0sea.h"
-#include "btr0defragment.h"
 #include "fil0fil.h"
-#include "fil0crypt.h"
 #include "ibuf0ibuf.h"
 #include "fts0fts.h"
 #include "fts0types.h"
@@ -623,8 +621,6 @@ handle_new_error:
 	case DB_FTS_INVALID_DOCID:
 	case DB_INTERRUPTED:
 	case DB_DICT_CHANGED:
-	case DB_TABLE_NOT_FOUND:
-	case DB_DECRYPTION_FAILED:
 		if (savept) {
 			/* Roll back the latest, possibly incomplete insertion
 			or update */
@@ -660,7 +656,9 @@ handle_new_error:
 		      "InnoDB: lack of space. You must add"
 		      " a new data file to\n"
 		      "InnoDB: my.cnf and restart the database.\n", stderr);
-		abort();
+
+		ut_ad(0);
+		exit(1);
 
 	case DB_CORRUPTION:
 		fputs("InnoDB: We detected index corruption"
@@ -1315,13 +1313,7 @@ row_insert_for_mysql(
 			prebuilt->table->name);
 
 		return(DB_TABLESPACE_NOT_FOUND);
-	} else if (prebuilt->table->is_encrypted) {
-		ib_push_warning(trx, DB_DECRYPTION_FAILED,
-			"Table %s in tablespace %lu encrypted."
-			"However key management plugin or used key_id is not found or"
-			" used encryption algorithm or method does not match.",
-			prebuilt->table->name, prebuilt->table->space);
-		return(DB_DECRYPTION_FAILED);
+
 	} else if (prebuilt->magic_n != ROW_PREBUILT_ALLOCATED) {
 		fprintf(stderr,
 			"InnoDB: Error: trying to free a corrupt\n"
@@ -1460,11 +1452,10 @@ error_exit:
 	que_thr_stop_for_mysql_no_error(thr, trx);
 
 	if (UNIV_LIKELY(!(trx->fake_changes))) {
-
 		if (table->is_system_db) {
-			srv_stats.n_system_rows_inserted.add((size_t)trx->id, 1);
+			srv_stats.n_system_rows_inserted.inc(size_t(trx->id));
 		} else {
-			srv_stats.n_rows_inserted.add((size_t)trx->id, 1);
+			srv_stats.n_rows_inserted.inc(size_t(trx->id));
 		}
 
 		if (prebuilt->clust_index_was_generated) {
@@ -1727,13 +1718,6 @@ row_update_for_mysql(
 			"InnoDB: how you can resolve the problem.\n",
 			prebuilt->table->name);
 		return(DB_ERROR);
-	} else if (prebuilt->table->is_encrypted) {
-		ib_push_warning(trx, DB_DECRYPTION_FAILED,
-			"Table %s in tablespace %lu encrypted."
-			"However key management plugin or used key_id is not found or"
-			" used encryption algorithm or method does not match.",
-			prebuilt->table->name, prebuilt->table->space);
-		return (DB_TABLE_NOT_FOUND);
 	}
 
 	if (UNIV_UNLIKELY(prebuilt->magic_n != ROW_PREBUILT_ALLOCATED)) {
@@ -1873,17 +1857,15 @@ run_again:
 		dict_table_n_rows_dec(prebuilt->table);
 
 		if (table->is_system_db) {
-			srv_stats.n_system_rows_deleted.add(
-				(size_t)trx->id, 1);
+			srv_stats.n_system_rows_deleted.inc(size_t(trx->id));
 		} else {
-			srv_stats.n_rows_deleted.add((size_t)trx->id, 1);
+			srv_stats.n_rows_deleted.inc(size_t(trx->id));
 		}
 	} else {
 		if (table->is_system_db) {
-			srv_stats.n_system_rows_updated.add(
-				(size_t)trx->id, 1);
+			srv_stats.n_system_rows_updated.inc(size_t(trx->id));
 		} else {
-			srv_stats.n_rows_updated.add((size_t)trx->id, 1);
+			srv_stats.n_rows_updated.inc(size_t(trx->id));
 		}
 	}
 
@@ -2121,17 +2103,15 @@ run_again:
 		dict_table_n_rows_dec(table);
 
 		if (table->is_system_db) {
-			srv_stats.n_system_rows_deleted.add(
-				(size_t)trx->id, 1);
+			srv_stats.n_system_rows_deleted.inc(size_t(trx->id));
 		} else {
-			srv_stats.n_rows_deleted.add((size_t)trx->id, 1);
+			srv_stats.n_rows_deleted.inc(size_t(trx->id));
 		}
 	} else {
 		if (table->is_system_db) {
-			srv_stats.n_system_rows_updated.add(
-				(size_t)trx->id, 1);
+			srv_stats.n_system_rows_updated.inc(size_t(trx->id));
 		} else {
-			srv_stats.n_rows_updated.add((size_t)trx->id, 1);
+			srv_stats.n_rows_updated.inc(size_t(trx->id));
 		}
 	}
 
@@ -2252,9 +2232,7 @@ row_create_table_for_mysql(
 				(will be freed, or on DB_SUCCESS
 				added to the data dictionary cache) */
 	trx_t*		trx,	/*!< in/out: transaction */
-	bool		commit,	/*!< in: if true, commit the transaction */
-	fil_encryption_t mode,	/*!< in: encryption mode */
-	ulint		key_id)	/*!< in: encryption key_id */
+	bool		commit)	/*!< in: if true, commit the transaction */
 {
 	tab_node_t*	node;
 	mem_heap_t*	heap;
@@ -2367,7 +2345,7 @@ err_exit:
 		ut_ad(strstr(table->name, "/FTS_") != NULL);
 	}
 
-	node = tab_create_graph_create(table, heap, commit, mode, key_id);
+	node = tab_create_graph_create(table, heap, commit);
 
 	thr = pars_complete_graph_for_exec(node, trx, heap);
 
@@ -3185,8 +3163,6 @@ row_discard_tablespace_for_mysql(
 
 	if (table == 0) {
 		err = DB_TABLE_NOT_FOUND;
-	} else if (table->is_encrypted) {
-		err = DB_DECRYPTION_FAILED;
 	} else if (table->space == TRX_SYS_SPACE) {
 		char	table_name[MAX_FULL_NAME_LEN + 1];
 
@@ -3305,37 +3281,6 @@ run_again:
 	return(err);
 }
 
-static
-void
-fil_wait_crypt_bg_threads(
-	dict_table_t* table)
-{
-	time_t start = time(0);
-	time_t last = start;
-
-	while (table->n_ref_count > 0) {
-		dict_mutex_exit_for_mysql();
-		os_thread_sleep(20000);
-		dict_mutex_enter_for_mysql();
-		time_t now = time(0);
-		if (now >= last + 30) {
-			fprintf(stderr,
-				"WARNING: waited %ld seconds "
-				"for ref-count on table: %s space: %u\n",
-				now - start, table->name, table->space);
-			last = now;
-		}
-
-		if (now >= start + 300) {
-			fprintf(stderr,
-				"WARNING: after %ld seconds, gave up waiting "
-				"for ref-count on table: %s space: %u\n",
-				now - start, table->name, table->space);
-			break;
-		}
-	}
-}
-
 /*********************************************************************//**
 Truncates a table for MySQL.
 @return	error code or DB_SUCCESS */
@@ -3401,8 +3346,6 @@ row_truncate_table_for_mysql(
 
 	if (dict_table_is_discarded(table)) {
 		return(DB_TABLESPACE_DELETED);
-	} else if (table->is_encrypted) {
-		return(DB_DECRYPTION_FAILED);
 	} else if (table->ibd_file_missing) {
 		return(DB_TABLESPACE_NOT_FOUND);
 	}
@@ -3524,44 +3467,29 @@ row_truncate_table_for_mysql(
 
 	if (table->space && !DICT_TF2_FLAG_IS_SET(table, DICT_TF2_TEMPORARY)) {
 		/* Discard and create the single-table tablespace. */
-		ulint	space_id = table->space;
-		ulint	flags	= ULINT_UNDEFINED;
-		ulint	key_id  = FIL_DEFAULT_ENCRYPTION_KEY;
-		fil_encryption_t mode = FIL_ENCRYPTION_DEFAULT;
+		ulint	space	= table->space;
+		ulint	flags	= fil_space_get_flags(space);
 
 		dict_get_and_save_data_dir_path(table, true);
 
-		if (fil_space_t* space = fil_space_acquire(space_id)) {
-			fil_space_crypt_t* crypt_data = space->crypt_data;
-
-			if (crypt_data) {
-				key_id = crypt_data->key_id;
-				mode = crypt_data->encryption;
-			}
-
-			flags = space->flags;
-			fil_space_release(space);
-		}
-
 		if (flags != ULINT_UNDEFINED
-		    && fil_discard_tablespace(space_id) == DB_SUCCESS) {
+		    && fil_discard_tablespace(space) == DB_SUCCESS) {
 
 			dict_index_t*	index;
 
-			dict_hdr_get_new_id(NULL, NULL, &space_id);
+			dict_hdr_get_new_id(NULL, NULL, &space);
 
 			/* Lock all index trees for this table. We must
 			do so after dict_hdr_get_new_id() to preserve
 			the latch order */
 			dict_table_x_lock_indexes(table);
 
-			if (space_id == ULINT_UNDEFINED
+			if (space == ULINT_UNDEFINED
 			    || fil_create_new_single_table_tablespace(
-				    space_id, table->name,
+				    space, table->name,
 				    table->data_dir_path,
 				    flags, table->flags2,
-				    FIL_IBD_FILE_INITIAL_SIZE,
-				    mode, key_id)
+				    FIL_IBD_FILE_INITIAL_SIZE)
 			    != DB_SUCCESS) {
 				dict_table_x_unlock_indexes(table);
 
@@ -3575,21 +3503,21 @@ row_truncate_table_for_mysql(
 				goto funct_exit;
 			}
 
-			recreate_space = space_id;
+			recreate_space = space;
 
 			/* Replace the space_id in the data dictionary cache.
 			The persisent data dictionary (SYS_TABLES.SPACE
 			and SYS_INDEXES.SPACE) are updated later in this
 			function. */
-			table->space = space_id;
+			table->space = space;
 			index = dict_table_get_first_index(table);
 			do {
-				index->space = space_id;
+				index->space = space;
 				index = dict_table_get_next_index(index);
 			} while (index);
 
 			mtr_start_trx(&mtr, trx);
-			fsp_header_init(space_id,
+			fsp_header_init(space,
 					FIL_IBD_FILE_INITIAL_SIZE, &mtr);
 			mtr_commit(&mtr);
 		}
@@ -3994,19 +3922,6 @@ row_drop_table_for_mysql(
 		goto funct_exit;
 	}
 
-	/* If table is encrypted and table page encryption failed
-	return error. */
-	if (table->is_encrypted) {
-
-		if (table->can_be_evicted) {
-			dict_table_move_from_lru_to_non_lru(table);
-		}
-
-		dict_table_close(table, TRUE, FALSE);
-		err = DB_DECRYPTION_FAILED;
-		goto funct_exit;
-	}
-
 	/* Turn on this drop bit before we could release the dictionary
 	latch */
 	table->to_be_dropped = true;
@@ -4044,8 +3959,6 @@ row_drop_table_for_mysql(
 	if (!dict_table_is_temporary(table)) {
 
 		dict_stats_recalc_pool_del(table);
-		dict_stats_defrag_pool_del(table, NULL);
-		btr_defragment_remove_table(table);
 
 		/* Remove stats for this table and all of its indexes from the
 		persistent storage if it exists and if there are stats for this
@@ -4175,9 +4088,6 @@ row_drop_table_for_mysql(
 	shouldn't have to. There should never be record locks on a table
 	that is going to be dropped. */
 
-	/* Wait on background threads to stop using table */
-	fil_wait_crypt_bg_threads(table);
-
 	if (table->n_ref_count == 0) {
 		lock_remove_all_on_table(table, TRUE);
 		ut_a(table->n_rec_locks == 0);
@@ -4258,18 +4168,6 @@ row_drop_table_for_mysql(
 		/* Mark the index unusable. */
 		index->page = FIL_NULL;
 		rw_lock_x_unlock(dict_index_get_lock(index));
-	}
-
-	/* If table has not yet have crypt_data, try to read it to
-	make freeing the table easier. */
-	if (!table->crypt_data) {
-
-		if (fil_space_t* space = fil_space_acquire_silent(table->space)) {
-			/* We use crypt data in dict_table_t in ha_innodb.cc
-			to push warnings to user thread. */
-			table->crypt_data = space->crypt_data;
-			fil_space_release(space);
-		}
 	}
 
 	/* We use the private SQL parser of Innobase to generate the
@@ -4371,7 +4269,6 @@ row_drop_table_for_mysql(
 
 	switch (err) {
 		ibool	is_temp;
-		ulint	table_flags;
 
 	case DB_SUCCESS:
 		/* Clone the name, in case it has been allocated
@@ -4380,7 +4277,6 @@ row_drop_table_for_mysql(
 		space_id = table->space;
 		ibd_file_missing = table->ibd_file_missing;
 
-		table_flags = table->flags;
 		is_temp = DICT_TF2_FLAG_IS_SET(table, DICT_TF2_TEMPORARY);
 
 		/* If there is a temp path then the temp flag is set.
@@ -4396,9 +4292,9 @@ row_drop_table_for_mysql(
 		}
 
 		/* We do not allow temporary tables with a remote path. */
-		ut_a(!(is_temp && DICT_TF_HAS_DATA_DIR(table_flags)));
+		ut_a(!(is_temp && DICT_TF_HAS_DATA_DIR(table->flags)));
 
-		if (space_id && DICT_TF_HAS_DATA_DIR(table_flags)) {
+		if (space_id && DICT_TF_HAS_DATA_DIR(table->flags)) {
 			dict_get_and_save_data_dir_path(table, true);
 			ut_a(table->data_dir_path);
 
@@ -4464,9 +4360,8 @@ row_drop_table_for_mysql(
 		if (err == DB_SUCCESS && space_id > TRX_SYS_SPACE) {
 			if (!is_temp
 			    && !fil_space_for_table_exists_in_mem(
-					space_id, tablename,
-					print_msg, false, NULL, 0,
-					table_flags)) {
+					space_id, tablename, FALSE,
+					print_msg, false, NULL, 0)) {
 				/* This might happen if we are dropping a
 				discarded tablespace */
 				err = DB_SUCCESS;
@@ -5526,7 +5421,8 @@ loop:
 		fputs("  InnoDB: Warning: CHECK TABLE on ", stderr);
 		dict_index_name_print(stderr, prebuilt->trx, index);
 		fprintf(stderr, " returned %lu\n", ret);
-		/* fall through (this error is ignored by CHECK TABLE) */
+		/* (this error is ignored by CHECK TABLE) */
+		/* fall through */
 	case DB_END_OF_INDEX:
 func_exit:
 		mem_free(buf);

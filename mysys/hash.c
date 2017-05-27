@@ -61,7 +61,7 @@ my_hash_value_type my_hash_sort(CHARSET_INFO *cs, const uchar *key,
 
   @param[in,out] hash         The hash that is initialized
   @param[in[     growth_size  size incrememnt for the underlying dynarray
-  @param[in]     charset      The character set information
+  @param[in]     charset      The charater set information
   @param[in]     size         The hash size
   @param[in]     key_offest   The key offset for the hash
   @param[in]     key_length   The length of the key used in
@@ -94,9 +94,10 @@ my_hash_init2(HASH *hash, uint growth_size, CHARSET_INFO *charset,
   hash->free=free_element;
   hash->flags=flags;
   hash->charset=charset;
-  res= init_dynamic_array2(&hash->array, sizeof(HASH_LINK), NULL, size,
-                           growth_size, MYF((flags & HASH_THREAD_SPECIFIC ?
-                                             MY_THREAD_SPECIFIC : 0)));
+  res= my_init_dynamic_array2(&hash->array, 
+                              sizeof(HASH_LINK), NULL, size, growth_size, 
+                              MYF((flags & HASH_THREAD_SPECIFIC ?
+                                   MY_THREAD_SPECIFIC : 0)));
   DBUG_RETURN(res);
 }
 
@@ -618,7 +619,7 @@ exit:
 
 /**
    Update keys when record has changed.
-   This is much more efficient than using a delete & insert.
+   This is much more efficent than using a delete & insert.
 */
 
 my_bool my_hash_update(HASH *hash, uchar *record, uchar *old_key,

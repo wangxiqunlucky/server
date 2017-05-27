@@ -1,7 +1,5 @@
 include/master-slave.inc
 [connection master]
-set global sql_mode='';
-set local sql_mode='';
 
 -------- switch to master -------
 SET AUTOCOMMIT = 1;
@@ -1622,5 +1620,4 @@ use test;
 DROP TEMPORARY TABLE mysqltest1.t22;
 DROP DATABASE mysqltest1;
 DROP DATABASE mysqltest3;
-set global sql_mode=default;
 include/rpl_end.inc

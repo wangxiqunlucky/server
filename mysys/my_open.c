@@ -52,9 +52,9 @@ File my_open(const char *FileName, int Flags, myf MyFlags)
   fd= my_win_open(FileName, Flags);
 #else
   if (MyFlags & MY_NOSYMLINKS)
-    fd = open_nosymlinks(FileName, Flags | O_CLOEXEC, my_umask);
+    fd = open_nosymlinks(FileName, Flags, my_umask);
   else
-    fd = open(FileName, Flags | O_CLOEXEC, my_umask);
+    fd = open(FileName, Flags, my_umask);
 #endif
 
   fd= my_register_filename(fd, FileName, FILE_BY_OPEN,

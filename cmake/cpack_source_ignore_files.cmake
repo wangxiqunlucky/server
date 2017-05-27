@@ -14,8 +14,6 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA 
 
 SET(CPACK_SOURCE_IGNORE_FILES
-\\\\.git/
-\\\\.gitignore
 CMakeCache\\\\.txt
 cmake_dist\\\\.cmake
 CPackSourceConfig\\\\.cmake

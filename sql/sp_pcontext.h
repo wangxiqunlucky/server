@@ -63,11 +63,12 @@ public:
   Create_field field_def;
 
 public:
-  sp_variable(LEX_STRING _name, uint _offset)
+  sp_variable(LEX_STRING _name, enum_field_types _type, enum_mode _mode,
+              uint _offset)
    :Sql_alloc(),
     name(_name),
-    type(MYSQL_TYPE_NULL),
-    mode(MODE_IN),
+    type(_type),
+    mode(_mode),
     offset(_offset),
     default_value(NULL)
   { }
@@ -339,9 +340,14 @@ public:
   ///
   /// @param thd  Thread context.
   /// @param name Name of the SP-variable.
+  /// @param type Type of the SP-variable.
+  /// @param mode Mode of the SP-variable.
   ///
   /// @return instance of newly added SP-variable.
-  sp_variable *add_variable(THD *thd, LEX_STRING name);
+  sp_variable *add_variable(THD *thd,
+                            LEX_STRING name,
+                            enum enum_field_types type,
+                            sp_variable::enum_mode mode);
 
   /// Retrieve full type information about SP-variables in this parsing
   /// context and its children.

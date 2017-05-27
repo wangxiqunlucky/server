@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2017, MariaDB Corporation. All Rights Reserved.
+Copyright (c) 2017, MariaDB Corporation. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -371,13 +371,11 @@ Given a tablespace id and page number tries to get that page. If the
 page is not in the buffer pool it is not loaded and NULL is returned.
 Suitable for using when holding the lock_sys_t::mutex. */
 UNIV_INTERN
-buf_block_t*
+const buf_block_t*
 buf_page_try_get_func(
 /*==================*/
 	ulint		space_id,/*!< in: tablespace id */
 	ulint		page_no,/*!< in: page number */
-	ulint		rw_latch,       /*!< in: RW_S_LATCH, RW_X_LATCH */
-	bool		possibly_freed, /*!< in: don't mind if page is freed */
 	const char*	file,	/*!< in: file name */
 	ulint		line,	/*!< in: line where called */
 	mtr_t*		mtr);	/*!< in: mini-transaction */
@@ -389,8 +387,7 @@ not loaded.  Suitable for using when holding the lock_sys_t::mutex.
 @param mtr	in: mini-transaction
 @return		the page if in buffer pool, NULL if not */
 #define buf_page_try_get(space_id, page_no, mtr)	\
-	buf_page_try_get_func(space_id, page_no, RW_S_LATCH, false, \
-			      __FILE__, __LINE__, mtr);
+	buf_page_try_get_func(space_id, page_no, __FILE__, __LINE__, mtr);
 
 /********************************************************************//**
 Get read access to a compressed page (usually of type
@@ -426,8 +423,7 @@ buf_page_get_gen(
 				BUF_GET_IF_IN_POOL_OR_WATCH */
 	const char*	file,	/*!< in: file name */
 	ulint		line,	/*!< in: line where called */
-	mtr_t*		mtr,	/*!< in: mini-transaction */
-	dberr_t*	err = NULL); /*!< out: error code */
+	mtr_t*		mtr);	/*!< in: mini-transaction */
 /********************************************************************//**
 Initializes a page to the buffer buf_pool. The page is usually not read
 from a file even if it cannot be found in the buffer buf_pool. This is one
@@ -638,68 +634,19 @@ buf_block_unfix(
 #else /* !UNIV_HOTBACKUP */
 # define buf_block_modify_clock_inc(block) ((void) 0)
 #endif /* !UNIV_HOTBACKUP */
-
-/** Checks if the page is in crc32 checksum format.
-@param[in]	read_buf	database page
-@param[in]	checksum_field1	new checksum field
-@param[in]	checksum_field2	old checksum field
-@return true if the page is in crc32 checksum format */
-bool
-buf_page_is_checksum_valid_crc32(
-	const byte*	read_buf,
-	ulint		checksum_field1,
-	ulint		checksum_field2)
-	MY_ATTRIBUTE((warn_unused_result));
-
-/** Checks if the page is in innodb checksum format.
-@param[in]	read_buf	database page
-@param[in]	checksum_field1	new checksum field
-@param[in]	checksum_field2	old checksum field
-@return true if the page is in innodb checksum format */
-bool
-buf_page_is_checksum_valid_innodb(
-	const byte*	read_buf,
-	ulint		checksum_field1,
-	ulint		checksum_field2)
-	MY_ATTRIBUTE((warn_unused_result));
-
-/** Checks if the page is in none checksum format.
-@param[in]	read_buf	database page
-@param[in]	checksum_field1	new checksum field
-@param[in]	checksum_field2	old checksum field
-@return true if the page is in none checksum format */
-bool
-buf_page_is_checksum_valid_none(
-	const byte*	read_buf,
-	ulint		checksum_field1,
-	ulint		checksum_field2)
-	MY_ATTRIBUTE((warn_unused_result));
-
 /********************************************************************//**
 Checks if a page is corrupt.
-@param[in]	check_lsn		true if LSN should be checked
-@param[in]	read_buf		Page to be checked
-@param[in]	zip_size		compressed size or 0
-@param[in]	space			Pointer to tablespace
-@return	true if corrupted, false if not */
-bool
+@return	TRUE if corrupted */
+UNIV_INTERN
+ibool
 buf_page_is_corrupted(
-	bool			check_lsn,
-	const byte*		read_buf,
-	ulint			zip_size,
-	const fil_space_t* 	space)
-	MY_ATTRIBUTE((warn_unused_result));
-/********************************************************************//**
-Check if page is maybe compressed, encrypted or both when we encounter
-corrupted page. Note that we can't be 100% sure if page is corrupted
-or decrypt/decompress just failed.
-@param[in]	bpage		Page
-@return true if page corrupted, false if not */
-bool
-buf_page_check_corrupt(
-	buf_page_t*	bpage)	/*!< in/out: buffer page read from disk */
-	MY_ATTRIBUTE(( warn_unused_result));
-
+/*==================*/
+	bool		check_lsn,	/*!< in: true if we need to check the
+					and complain about the LSN */
+	const byte*	read_buf,	/*!< in: a database page */
+	ulint		zip_size)	/*!< in: size of compressed page;
+					0 for uncompressed pages */
+	MY_ATTRIBUTE((nonnull, warn_unused_result));
 /********************************************************************//**
 Checks if a page is all zeroes.
 @return	TRUE if the page is all zeroes */
@@ -908,17 +855,7 @@ UNIV_INLINE
 enum buf_page_state
 buf_page_get_state(
 /*===============*/
-	const buf_page_t*	bpage);	/*!< in: pointer to the control
-					block */
-/*********************************************************************//**
-Gets the state name for state of a block
-@return	name or "CORRUPTED" */
-UNIV_INLINE
-const char*
-buf_get_state_name(
-/*===============*/
-	const buf_block_t*	block);	/*!< in: pointer to the control
-					block */
+	const buf_page_t*	bpage);	/*!< in: pointer to the control block */
 /*********************************************************************//**
 Gets the state of a block.
 @return	state */
@@ -1534,76 +1471,6 @@ buf_own_zip_mutex_for_page(
 	MY_ATTRIBUTE((nonnull,warn_unused_result));
 #endif /* UNIV_DEBUG */
 
-/********************************************************************//**
-The hook that is called just before a page is written to disk.
-The function encrypts the content of the page and returns a pointer
-to a frame that will be written instead of the real frame. */
-UNIV_INTERN
-byte*
-buf_page_encrypt_before_write(
-/*==========================*/
-	buf_page_t*	page,		/*!< in/out: buffer page to be flushed */
-	byte*		frame,		/*!< in: src frame */
-	ulint		space_id);	/*!< in: space id */
-
-/**********************************************************************
-The hook that is called after page is written to disk.
-The function releases any resources needed for encryption that was allocated
-in buf_page_encrypt_before_write */
-UNIV_INTERN
-ibool
-buf_page_encrypt_after_write(
-/*=========================*/
-	buf_page_t* page); /*!< in/out: buffer page that was flushed */
-
-/********************************************************************//**
-The hook that is called just before a page is read from disk.
-The function allocates memory that is used to temporarily store disk content
-before getting decrypted */
-UNIV_INTERN
-byte*
-buf_page_decrypt_before_read(
-/*=========================*/
-	buf_page_t* page, /*!< in/out: buffer page read from disk */
-	ulint	zip_size);  /*!< in: compressed page size, or 0 */
-
-/********************************************************************//**
-The hook that is called just after a page is read from disk.
-The function decrypt disk content into buf_page_t and releases the
-temporary buffer that was allocated in buf_page_decrypt_before_read */
-UNIV_INTERN
-bool
-buf_page_decrypt_after_read(
-/*========================*/
-	buf_page_t* page); /*!< in/out: buffer page read from disk */
-
-/** @brief The temporary memory structure.
-
-NOTE! The definition appears here only for other modules of this
-directory (buf) to see it. Do not use from outside! */
-
-typedef struct {
-	bool		reserved;	/*!< true if this slot is reserved
-					*/
-#ifdef HAVE_LZO
-	byte*		lzo_mem;	/*!< Temporal memory used by LZO */
-#endif
-	byte*           crypt_buf;	/*!< for encryption the data needs to be
-					copied to a separate buffer before it's
-					encrypted&written. this as a page can be
-					read while it's being flushed */
-	byte*		crypt_buf_free; /*!< for encryption, allocated buffer
-					that is then alligned */
-	byte*		comp_buf;	/*!< for compression we need
-					temporal buffer because page
-					can be read while it's being flushed */
-	byte*		comp_buf_free;	/*!< for compression, allocated
-					buffer that is then alligned */
-	byte*		out_buf;	/*!< resulting buffer after
-					encryption/compression. This is a
-					pointer and not allocated. */
-} buf_tmp_buffer_t;
-
 /** The common buffer control block structure
 for compressed and uncompressed frames */
 
@@ -1672,24 +1539,6 @@ struct buf_page_t{
 					state == BUF_BLOCK_ZIP_PAGE and
 					zip.data == NULL means an active
 					buf_pool->watch */
-
-	ulint           write_size;     /* Write size is set when this
-					page is first time written and then
-					if written again we check is TRIM
-					operation needed. */
-
-	unsigned        key_version;	/*!< key version for this block */
-	bool            encrypted;	/*!< page is still encrypted */
-
-	ulint           real_size;	/*!< Real size of the page
-					Normal pages == UNIV_PAGE_SIZE
-					page compressed pages, payload
-					size alligned to sector boundary.
-					*/
-
-	buf_tmp_buffer_t* slot;		/*!< Slot for temporary memory
-					used for encryption/compression
-					or NULL */
 #ifndef UNIV_HOTBACKUP
 	buf_page_t*	hash;		/*!< node used in chaining to
 					buf_pool->page_hash or
@@ -2008,17 +1857,6 @@ struct buf_buddy_stat_t {
 	ib_uint64_t	relocated_usec;
 };
 
-/** @brief The temporary memory array structure.
-
-NOTE! The definition appears here only for other modules of this
-directory (buf) to see it. Do not use from outside! */
-
-typedef struct {
-	ulint		n_slots;	/*!< Total number of slots */
-	buf_tmp_buffer_t *slots;	/*!< Pointer to the slots in the
-					array */
-} buf_tmp_array_t;
-
 /** @brief The buffer pool structure.
 
 NOTE! The definition appears here only for other modules of this
@@ -2195,10 +2033,6 @@ struct buf_pool_t{
 					/*!< Sentinel records for buffer
 					pool watches.  */
 
-	buf_tmp_array_t*		tmp_arr;
-					/*!< Array for temporal memory
-					used in compression and encryption */
-
 #if BUF_BUDDY_LOW > UNIV_ZIP_SIZE_MIN
 # error "BUF_BUDDY_LOW > UNIV_ZIP_SIZE_MIN"
 #endif
@@ -2348,19 +2182,6 @@ struct	CheckUnzipLRUAndLRUList {
 	}
 };
 #endif /* UNIV_DEBUG || defined UNIV_BUF_DEBUG */
-
-/*********************************************************************//**
-Aquire LRU list mutex */
-void
-buf_pool_mutex_enter(
-/*=================*/
-	buf_pool_t*	buf_pool); /*!< in: buffer pool */
-/*********************************************************************//**
-Exit LRU list mutex */
-void
-buf_pool_mutex_exit(
-/*================*/
-	buf_pool_t*	buf_pool); /*!< in: buffer pool */
 
 #ifndef UNIV_NONINL
 #include "buf0buf.ic"

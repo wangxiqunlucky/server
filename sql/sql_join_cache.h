@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   This file contains declarations for implementations
@@ -63,7 +63,7 @@ typedef struct st_cache_field {
 
 class JOIN_TAB_SCAN;
 
-class EXPLAIN_BKA_TYPE;
+struct st_explain_bka_type;
 
 /*
   JOIN_CACHE is the base class to support the implementations of 
@@ -84,7 +84,7 @@ class EXPLAIN_BKA_TYPE;
   For the third algorithm the accumulation of records allows to optimize
   fetching rows of the second operand from disk for some engines (MyISAM, 
   InnoDB), or to minimize the number of round-trips between the Server and
-  the engine nodes.        
+  the engine nodes (NDB Cluster).        
 */ 
 
 class JOIN_CACHE :public Sql_alloc
@@ -662,7 +662,7 @@ public:
   enum_nested_loop_state join_records(bool skip_last);
 
   /* Add a comment on the join algorithm employed by the join cache */
-  virtual void save_explain_data(EXPLAIN_BKA_TYPE *explain);
+  virtual void save_explain_data(struct st_explain_bka_type *explain);
 
   THD *thd();
 
@@ -1340,7 +1340,7 @@ public:
   /* Check index condition of the joined table for a record from BKA cache */
   bool skip_index_tuple(range_id_t range_info);
 
-  void save_explain_data(EXPLAIN_BKA_TYPE *explain);
+  void save_explain_data(struct st_explain_bka_type *explain);
 };
 
 
@@ -1431,5 +1431,5 @@ public:
   /* Check index condition of the joined table for a record from BKAH cache */
   bool skip_index_tuple(range_id_t range_info);
 
-  void save_explain_data(EXPLAIN_BKA_TYPE *explain);
+  void save_explain_data(struct st_explain_bka_type *explain);
 };

@@ -24,7 +24,7 @@
 # Short-Description: start and stop MySQL
 # Description: MySQL is a very fast and reliable SQL database engine.
 ### END INIT INFO
-
+ 
 # If you install MySQL on some other places than @prefix@, then you
 # have to do one of the following things for this script to work:
 #
@@ -48,7 +48,7 @@ datadir=
 
 # Default value, in seconds, afterwhich the script should timeout waiting
 # for server start. 
-# Value here is overridden by value in my.cnf. 
+# Value here is overriden by value in my.cnf. 
 # 0 means don't wait at all
 # Negative numbers mean to wait indefinitely
 service_startup_timeout=900
@@ -97,11 +97,6 @@ lsb_functions="/lib/lsb/init-functions"
 if test -f $lsb_functions ; then
   . $lsb_functions
 else
-  # Include non-LSB RedHat init functions to make systemctl redirect work
-  init_functions="/etc/init.d/functions"
-  if test -f $init_functions; then
-    . $init_functions
-  fi
   log_success_msg()
   {
     echo " SUCCESS! $@"
@@ -156,8 +151,7 @@ parse_server_arguments() {
 
 # Get arguments from the my.cnf file,
 # the only group, which is read from now on is [mysqld]
-if test -x $bindir/my_print_defaults
-then
+if test -x "$bindir/my_print_defaults";  then
   print_defaults="$bindir/my_print_defaults"
 else
   # Try to find basedir in /etc/my.cnf
@@ -173,11 +167,6 @@ else
       if test -x "$d/bin/my_print_defaults"
       then
         print_defaults="$d/bin/my_print_defaults"
-        break
-      fi
-      if test -x "$d/bin/mysql_print_defaults"
-      then
-        print_defaults="$d/bin/mysql_print_defaults"
         break
       fi
     done
@@ -351,10 +340,7 @@ case "$mode" in
     # Stop the service and regardless of whether it was
     # running or not, start it again.
     if $0 stop  "$@"; then
-      if ! $0 start "$@"; then
-        log_failure_msg "Failed to restart server."
-        exit 1
-      fi
+      $0 start "$@"
     else
       log_failure_msg "Failed to stop running server, so refusing to try to start."
       exit 1
@@ -384,7 +370,7 @@ case "$mode" in
       fi
     else
       # Try to find appropriate mysqld process
-      mysqld_pid=`pidof $libexecdir/mysqld`
+      mysqld_pid=`pgrep $libexecdir/mysqld`
 
       # test if multiple pids exist
       pid_count=`echo $mysqld_pid | wc -w`
@@ -431,21 +417,10 @@ case "$mode" in
     fi
     exit $r
     ;;
-  'bootstrap')
-      if test "$_use_systemctl" == 1 ; then
-        log_failure_msg "Please use galera_new_cluster to start the mariadb service with --wsrep-new-cluster"
-        exit 1
-      fi
-      # Bootstrap the cluster, start the first node
-      # that initiate the cluster
-      echo $echo_n "Bootstrapping the cluster.. "
-      $0 start $other_args --wsrep-new-cluster
-      exit $?
-      ;;
   *)
       # usage
       basename=`basename "$0"`
-      echo "Usage: $basename  {start|stop|restart|reload|force-reload|status|configtest|bootstrap}  [ MySQL server options ]"
+      echo "Usage: $basename  {start|stop|restart|reload|force-reload|status|configtest}  [ MySQL server options ]"
       exit 1
     ;;
 esac

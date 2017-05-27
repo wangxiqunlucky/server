@@ -36,10 +36,7 @@ class DllExport JSONDEF : public DOSDEF {         /* Table description */
   friend class TDBJSON;
   friend class TDBJSN;
   friend class TDBJCL;
-  friend PQRYRES JSONColumns(PGLOBAL, char*, char*, PTOS, bool);
-#if defined(MONGO_SUPPORT)
-	friend class MGOFAM;
-#endif   // MONGO_SUPPORT
+  friend PQRYRES JSONColumns(PGLOBAL, char*, PTOS, bool);
 public:
   // Constructor
   JSONDEF(void);
@@ -61,14 +58,6 @@ public:
   int   Level;                  /* Used for catalog table              */
   int   Base;                   /* The array index base                */
   bool  Strict;                 /* Strict syntax checking              */
-	char  Sep;                    /* The Jpath separator                 */
-	const char *Uri;							/* MongoDB connection URI              */
-#if defined(MONGO_SUPPORT)
-	PCSZ  Collname;               /* External collection name            */
-	PCSZ  Schema;                 /* External schema (DB) name           */
-	PSZ   Options;                /* Colist ; filter                     */
-	bool  Pipe;							      /* True if Colist is a pipeline        */
-#endif   // MONGO_SUPPORT
   }; // end of JSONDEF
 
 /* -------------------------- TDBJSN class --------------------------- */
@@ -80,9 +69,6 @@ public:
 class DllExport TDBJSN : public TDBDOS {
   friend class JSONCOL;
 	friend class JSONDEF;
-#if defined(MONGO_SUPPORT)
-	friend class MGOFAM;
-#endif   // MONGO_SUPPORT
 public:
   // Constructor
    TDBJSN(PJDEF tdp, PTXF txfp);
@@ -134,7 +120,6 @@ public:
 	int     SameRow;                 // Same row nb
 	int     Xval;                    // Index of expandable array
 	int     B;                       // Array index base
-	char    Sep;                     // The Jpath separator
 	bool    Strict;                  // Strict syntax checking
 	bool    Comma;                   // Row has final comma
   }; // end of class TDBJSN
@@ -184,8 +169,7 @@ class DllExport JSONCOL : public DOSCOL {
   JNODE  *Nodes;                // The intermediate objects
   int     Nod;                  // The number of intermediate objects
   int     Xnod;                 // Index of multiple values
-	char    Sep;                  // The Jpath separator
-	bool    Xpd;                  // True for expandable column
+  bool    Xpd;                  // True for expandable column
   bool    Parsed;               // True when parsed
   }; // end of class JSONCOL
 

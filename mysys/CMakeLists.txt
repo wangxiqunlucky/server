@@ -33,15 +33,13 @@ SET(MYSYS_SOURCES  array.c charset-def.c charset.c checksum.c my_default.c
 				my_basename.c
 				my_write.c ptr_cmp.c queues.c stacktrace.c
 				string.c thr_alarm.c thr_lock.c thr_mutex.c
-				thr_rwlock.c thr_timer.c
-                                tree.c typelib.c base64.c my_memmem.c
-                                 my_getpagesize.c
+				thr_rwlock.c tree.c typelib.c base64.c my_memmem.c my_getpagesize.c
 				lf_alloc-pin.c lf_dynarray.c lf_hash.c
                                 safemalloc.c my_new.cc
 				my_atomic.c my_getncpus.c my_safehash.c my_chmod.c my_rnd.c
                                 my_uuid.c wqueue.c waiting_threads.c ma_dyncol.c
 				my_rdtsc.c my_context.c psi_noop.c
-                                file_logger.c my_dlerror.c)
+                                file_logger.c)
 
 IF (WIN32)
  SET (MYSYS_SOURCES ${MYSYS_SOURCES} my_winthread.c my_wincond.c my_winerr.c my_winfile.c my_windac.c my_conio.c)
@@ -70,8 +68,8 @@ IF(HAVE_MLOCK)
 ENDIF()
 
 ADD_CONVENIENCE_LIBRARY(mysys ${MYSYS_SOURCES})
-TARGET_LINK_LIBRARIES(mysys dbug strings mysys_ssl ${ZLIB_LIBRARY} 
- ${LIBNSL} ${LIBM} ${LIBRT} ${LIBDL} ${LIBSOCKET} ${LIBEXECINFO})
+TARGET_LINK_LIBRARIES(mysys dbug strings ${ZLIB_LIBRARY} 
+ ${LIBNSL} ${LIBM} ${LIBRT} ${LIBSOCKET} ${LIBEXECINFO})
 DTRACE_INSTRUMENT(mysys)
 
 IF(HAVE_BFD_H)
@@ -90,10 +88,6 @@ ENDIF()
 ADD_EXECUTABLE(thr_lock thr_lock.c)
 TARGET_LINK_LIBRARIES(thr_lock mysys)
 SET_TARGET_PROPERTIES(thr_lock PROPERTIES COMPILE_FLAGS "-DMAIN")
-
-ADD_EXECUTABLE(thr_timer thr_timer.c)
-TARGET_LINK_LIBRARIES(thr_timer mysys)
-SET_TARGET_PROPERTIES(thr_timer PROPERTIES COMPILE_FLAGS "-DMAIN")
 
 IF(MSVC)
    INSTALL_DEBUG_TARGET(mysys DESTINATION ${INSTALL_LIBDIR}/debug)

@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2014, Oracle and/or its affiliates.
-   Copyright (c) 2009, 2016, MariaDB
+   Copyright (c) 2009, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* mysql command tool
  * Commands compatible with mSQL by David J. Hughes
@@ -597,6 +597,8 @@ static COMMANDS commands[] = {
   { "NAMES", 0, 0, 0, ""},
   { "NATIONAL", 0, 0, 0, ""},
   { "NATURAL", 0, 0, 0, ""},
+  { "NDB", 0, 0, 0, ""},
+  { "NDBCLUSTER", 0, 0, 0, ""},
   { "NCHAR", 0, 0, 0, ""},
   { "NEW", 0, 0, 0, ""},
   { "NEXT", 0, 0, 0, ""},
@@ -3059,7 +3061,6 @@ static int com_server_help(String *buffer __attribute__((unused)),
   {
     unsigned int num_fields= mysql_num_fields(result);
     my_ulonglong num_rows= mysql_num_rows(result);
-    mysql_fetch_fields(result);
     if (num_fields==3 && num_rows==1)
     {
       if (!(cur= mysql_fetch_row(result)))
@@ -3081,7 +3082,9 @@ static int com_server_help(String *buffer __attribute__((unused)),
       init_pager();
       char last_char= 0;
 
-      int UNINIT_VAR(num_name), UNINIT_VAR(num_cat);
+      int num_name= 0, num_cat= 0;
+      LINT_INIT(num_name);
+      LINT_INIT(num_cat);
 
       if (num_fields == 2)
       {
@@ -3218,7 +3221,7 @@ com_go(String *buffer,char *line __attribute__((unused)))
   }
 
   /* Remove garbage for nicer messages */
-  LINT_INIT_STRUCT(buff[0]);
+  LINT_INIT(buff[0]);
   remove_cntrl(*buffer);
 
   if (buffer->is_empty())
@@ -4711,7 +4714,8 @@ com_status(String *buffer __attribute__((unused)),
   const char *status_str;
   char buff[40];
   ulonglong id;
-  MYSQL_RES *UNINIT_VAR(result);
+  MYSQL_RES *result;
+  LINT_INIT(result);
 
   if (mysql_real_query_for_lazy(
         C_STRING_WITH_LEN("select DATABASE(), USER() limit 1")))
@@ -5271,7 +5275,8 @@ static void init_username()
   my_free(full_username);
   my_free(part_username);
 
-  MYSQL_RES *UNINIT_VAR(result);
+  MYSQL_RES *result;
+  LINT_INIT(result);
   if (!mysql_query(&mysql,"select USER()") &&
       (result=mysql_use_result(&mysql)))
   {

@@ -11,10 +11,9 @@ INSERT INTO memos VALUES (NULL, "Today is fine.");
 INSERT INTO memos VALUES (NULL, "Tomorrow will be fine.");
 INSERT INTO memos VALUES (NULL, "Yesterday was fine.");
 SELECT * FROM memos
-WHERE MATCH (content) AGAINST ("*DOR today good" IN BOOLEAN MODE)
-ORDER BY id;
+WHERE MATCH (content) AGAINST ("*DOR today good" IN BOOLEAN MODE);
 id	content
 1	Today is good day.
-2	Tomorrow will be good day.
 3	Today is fine.
+2	Tomorrow will be good day.
 DROP TABLE memos;

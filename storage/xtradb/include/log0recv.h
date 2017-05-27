@@ -44,8 +44,7 @@ UNIV_INTERN
 ibool
 log_block_checksum_is_ok_or_old_format(
 /*===================================*/
-	const byte*	block,	/*!< in: pointer to a log block */
-	bool		print_err); /*!< in print error ? */
+	const byte*	block);	/*!< in: pointer to a log block */
 
 /*******************************************************//**
 Calculates the new value for lsn when more data is added to the log. */

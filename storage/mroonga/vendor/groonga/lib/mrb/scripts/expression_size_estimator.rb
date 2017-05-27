@@ -99,12 +99,7 @@ module Groonga
 
     def estimate_equal(data, index_column)
       lexicon = index_column.lexicon
-      query = data.query
-      if query.domain == lexicon.id
-        term_id = query.value
-      else
-        term_id = lexicon[query]
-      end
+      term_id = lexicon[data.query]
       return 0 if term_id.nil?
 
       index_column.estimate_size(:term_id => term_id)

@@ -11,7 +11,7 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define MYSQL_SERVER 1
 #include "mysql_version.h"
@@ -2461,7 +2461,7 @@ TABLE *spider_mk_sys_tmp_table_for_result(
   if (i_list.push_back(i_field1))
     goto error_push_item1;
 
-  if (!(field2 = new (thd->mem_root) Field_blob(
+  if (!(field2 = new Field_blob(
     4294967295U, FALSE, field_name2, cs, TRUE)))
     goto error_alloc_field2;
   field2->init(table);
@@ -2477,7 +2477,7 @@ TABLE *spider_mk_sys_tmp_table_for_result(
   if (i_list.push_back(i_field2))
     goto error_push_item2;
 
-  if (!(field3 = new (thd->mem_root) Field_blob(
+  if (!(field3 = new Field_blob(
     4294967295U, FALSE, field_name3, cs, TRUE)))
     goto error_alloc_field3;
   field3->init(table);

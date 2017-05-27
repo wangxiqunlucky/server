@@ -176,7 +176,7 @@ bool CONSTANT::Rephrase(PGLOBAL g, PSZ work)
 void CONSTANT::Printf(PGLOBAL g, FILE *f, uint n)
   {
   Value->Printf(g, f, n);
-  } /* end of Printf */
+  } /* end of Print */
 
 /***********************************************************************/
 /*  Make string output of a constant object.                           */
@@ -184,7 +184,7 @@ void CONSTANT::Printf(PGLOBAL g, FILE *f, uint n)
 void CONSTANT::Prints(PGLOBAL g, char *ps, uint z)
   {
   Value->Prints(g, ps, z);
-  } /* end of Prints */
+  } /* end of Print */
 
 /* -------------------------- Class STRING --------------------------- */
 
@@ -408,7 +408,7 @@ bool STRING::Append_quoted(PCSZ s)
       case '\r':
       case '\b':
       case '\f': b |= Append('\\');
-        // passthru
+        // fall through
       default:
         b |= Append(*p);
         break;

@@ -151,7 +151,7 @@ MI_INFO *mi_open(const char *name, int mode, uint open_flags)
     }
     share->mode=open_mode;
     errpos=1;
-    if (mysql_file_read(kfile, share->state.header.file_version, head_length,
+    if (mysql_file_read(kfile, (uchar*)&share->state.header, head_length,
                         MYF(MY_NABP)))
     {
       my_errno= HA_ERR_NOT_A_TABLE;
@@ -739,6 +739,7 @@ uchar *mi_alloc_rec_buff(MI_INFO *info, ulong length, uchar **buf)
 {
   uint extra;
   uint32 UNINIT_VAR(old_length);
+  LINT_INIT(old_length);
 
   if (! *buf || length > (old_length=mi_get_rec_buff_len(info, *buf)))
   {
@@ -1201,6 +1202,7 @@ uchar *mi_keyseg_read(uchar *ptr, HA_KEYSEG *keyseg)
    keyseg->length	= mi_uint2korr(ptr);  ptr +=2;
    keyseg->start	= mi_uint4korr(ptr);  ptr +=4;
    keyseg->null_pos	= mi_uint4korr(ptr);  ptr +=4;
+   keyseg->bit_end= 0;
    keyseg->charset=0;				/* Will be filled in later */
    if (keyseg->null_bit)
      /* We adjust bit_pos if null_bit is last in the byte */

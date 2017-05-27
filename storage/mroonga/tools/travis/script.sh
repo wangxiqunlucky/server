@@ -14,7 +14,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 # set -x
 set -e
@@ -32,11 +32,7 @@ else
 fi
 
 n_processors="$(grep '^processor' /proc/cpuinfo | wc -l)"
-if [ "${MROONGA_BUNDLED}" = "yes" ]; then
-  max_n_processors=2
-else
-  max_n_processors=4
-fi
+max_n_processors=8
 if (( $n_processors > $max_n_processors )); then
   n_processors=$max_n_processors
 fi
@@ -102,14 +98,6 @@ run_sql_test()
   fi
 
   if [ "${MROONGA_BUNDLED}" = "yes" ]; then
-    # Plugins aren't supported.
-    cd ${mroonga_dir}/mysql-test/mroonga/storage
-    rm -rf alter_table/add_index/token_filters/
-    rm -rf alter_table/t/change_token_filter.test
-    rm -rf create/table/token_filters/
-    rm -rf fulltext/token_filters/
-    cd -
-
     ${mroonga_dir}/test/run-sql-test.sh \
                   "${test_args[@]}" \
                   --parallel="${n_processors}"

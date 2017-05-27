@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 --source ../../include/mroonga/check_ha_mroonga_so.inc
 
@@ -38,9 +38,6 @@ if (!$have_default_storage_engine_variable) {
 let have_default_tmp_storage_engine_variable=`SELECT 1 FROM information_schema.global_variables WHERE variable_name = "default_tmp_storage_engine"`;
 if ($have_default_tmp_storage_engine_variable) {
   let original_default_tmp_storage_engine=`SELECT variable_value FROM information_schema.global_variables WHERE variable_name = "default_tmp_storage_engine"`;
-  if (!$original_default_tmp_storage_engine) {
-    let original_default_tmp_storage_engine=NULL;
-  }
   set default_tmp_storage_engine=Mroonga;
 }
 

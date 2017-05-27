@@ -15,10 +15,6 @@
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifdef GRN_EMBEDDED
-#  define GRN_PLUGIN_FUNCTION_TAG tokenizers_mecab
-#endif
-
 #include <grn_str.h>
 
 #include <groonga.h>
@@ -513,21 +509,17 @@ grn_rc
 GRN_PLUGIN_INIT(grn_ctx *ctx)
 {
   {
-    char env[GRN_ENV_BUFFER_SIZE];
+    const char *env;
 
-    grn_getenv("GRN_MECAB_CHUNKED_TOKENIZE_ENABLED",
-               env,
-               GRN_ENV_BUFFER_SIZE);
-    grn_mecab_chunked_tokenize_enabled = (env[0] && strcmp(env, "yes") == 0);
+    env = getenv("GRN_MECAB_CHUNKED_TOKENIZE_ENABLED");
+    grn_mecab_chunked_tokenize_enabled = (env && strcmp(env, "yes") == 0);
   }
 
   {
-    char env[GRN_ENV_BUFFER_SIZE];
+    const char *env;
 
-    grn_getenv("GRN_MECAB_CHUNK_SIZE_THRESHOLD",
-               env,
-               GRN_ENV_BUFFER_SIZE);
-    if (env[0]) {
+    env = getenv("GRN_MECAB_CHUNK_SIZE_THRESHOLD");
+    if (env) {
       int threshold = -1;
       const char *end;
       const char *rest;

@@ -77,6 +77,8 @@ private:
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
+  /** Fields definition. */
+  static TABLE_FIELD_DEF m_field_def;
 
   /** Current row. */
   row_mutex_instances m_row;
@@ -134,6 +136,8 @@ private:
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
+  /** Fields definition. */
+  static TABLE_FIELD_DEF m_field_def;
 
   /** Current row. */
   row_rwlock_instances m_row;
@@ -185,6 +189,8 @@ private:
 
   /** Table share lock. */
   static THR_LOCK m_table_lock;
+  /** Fields definition. */
+  static TABLE_FIELD_DEF m_field_def;
 
   /** Current row. */
   row_cond_instances m_row;

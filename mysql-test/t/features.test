@@ -6,8 +6,6 @@
 drop table if exists t1;
 --enable_warnings
 
-set sql_mode="";
-
 flush status;
 
 show status like "feature%";

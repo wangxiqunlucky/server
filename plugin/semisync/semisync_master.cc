@@ -24,8 +24,6 @@
 
 /* This indicates whether semi-synchronous replication is enabled. */
 char rpl_semi_sync_master_enabled;
-unsigned long rpl_semi_sync_master_wait_point       =
-    SEMI_SYNC_MASTER_WAIT_POINT_AFTER_STORAGE_COMMIT;
 unsigned long rpl_semi_sync_master_timeout;
 unsigned long rpl_semi_sync_master_trace_level;
 char rpl_semi_sync_master_status                    = 0;
@@ -479,6 +477,7 @@ void ReplSemiSyncMaster::add_slave()
 void ReplSemiSyncMaster::remove_slave()
 {
   lock();
+  assert(rpl_semi_sync_master_clients > 0);
   rpl_semi_sync_master_clients--;
 
   /* Only switch off if semi-sync is enabled and is on */
@@ -635,7 +634,7 @@ int ReplSemiSyncMaster::commitTrx(const char* trx_wait_binlog_name,
                             (int)is_on());
     }
 
-    while (is_on() && !thd_killed(current_thd))
+    while (is_on() && !thd_killed(NULL))
     {
       if (reply_file_name_inited_)
       {
@@ -749,7 +748,7 @@ int ReplSemiSyncMaster::commitTrx(const char* trx_wait_binlog_name,
       active_tranxs_ may be NULL if someone disabled semi sync during
       cond_timewait()
     */
-    assert(thd_killed(current_thd) || !active_tranxs_ ||
+    assert(thd_killed(NULL) || !active_tranxs_ ||
            !active_tranxs_->is_tranx_end_pos(trx_wait_binlog_name,
                                              trx_wait_binlog_pos));
     
@@ -1050,6 +1049,8 @@ int ReplSemiSyncMaster::readSlaveReply(NET *net, uint32 server_id,
   int      result = -1;
   struct timespec start_ts;
   ulong trc_level = trace_level_;
+  LINT_INIT_STRUCT(start_ts);
+
   LINT_INIT_STRUCT(start_ts);
 
   function_enter(kWho);

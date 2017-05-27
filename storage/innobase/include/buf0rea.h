@@ -1,7 +1,6 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2013, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -42,8 +41,7 @@ buf_read_page(
 /*==========*/
 	ulint	space,	/*!< in: space id */
 	ulint	zip_size,/*!< in: compressed page size in bytes, or 0 */
-	ulint	offset, /*!< in: page number */
-	buf_page_t** bpage);/*!< out: page */
+	ulint	offset);/*!< in: page number */
 /********************************************************************//**
 High-level function which reads a page asynchronously from a file to the
 buffer buf_pool if it is not already there. Sets the io_fix flag and sets

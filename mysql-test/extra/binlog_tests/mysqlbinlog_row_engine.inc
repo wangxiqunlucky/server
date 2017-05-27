@@ -16,7 +16,6 @@
 #
 
 --source include/have_log_bin.inc
-set sql_mode="";
 
 SET NAMES 'utf8';
 #SHOW VARIABLES LIKE 'character_set%';
@@ -77,7 +76,7 @@ eval CREATE TABLE t1 (
   #
   c28 DATE,
   c29 DATETIME,
-  c30 TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  c30 TIMESTAMP,
   c31 TIME,
   c32 YEAR,
   #

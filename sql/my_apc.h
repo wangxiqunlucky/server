@@ -14,7 +14,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   Interface
@@ -50,29 +50,10 @@ public:
   ~Apc_target() { DBUG_ASSERT(!enabled && !apc_calls);}
 
   void init(mysql_mutex_t *target_mutex);
-
-  /* Destroy the target. The target must be disabled when this call is made. */
-  void destroy() { DBUG_ASSERT(!enabled); }
-
-  /* Enter ther state where the target is available for serving APC requests */
-  void enable() { enabled++; }
-
-  /*
-    Make the target unavailable for serving APC requests.
-
-    @note
-      This call will serve all requests that were already enqueued
-  */
-  void disable()
-  {
-    DBUG_ASSERT(enabled);
-    mysql_mutex_lock(LOCK_thd_data_ptr);
-    bool process= !--enabled && have_apc_requests();
-    mysql_mutex_unlock(LOCK_thd_data_ptr);
-    if (unlikely(process))
-      process_apc_requests();
-  }
-
+  void destroy();
+  void enable();
+  void disable();
+  
   void process_apc_requests();
   /* 
     A lightweight function, intended to be used in frequent checks like this:

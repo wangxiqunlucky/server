@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <my_check_opt.h>
 
@@ -21,43 +21,6 @@ void _mi_report_crashed(void *file __attribute__((unused)),
                         const char *sfile __attribute__((unused)),
                         uint sline __attribute__((unused)))
 {
-}
-
-static unsigned int no_key()
-{
-  return ENCRYPTION_KEY_VERSION_INVALID;
-}
-
-struct encryption_service_st encryption_handler=
-{
-  no_key, 0, 0, 0, 0, 0, 0
-};
-
-int encryption_scheme_encrypt(const unsigned char* src __attribute__((unused)),
-                              unsigned int slen __attribute__((unused)),
-                              unsigned char* dst __attribute__((unused)),
-                              unsigned int* dlen __attribute__((unused)),
-                              struct st_encryption_scheme *scheme __attribute__((unused)),
-                              unsigned int key_version __attribute__((unused)),
-                              unsigned int i32_1 __attribute__((unused)),
-                              unsigned int i32_2 __attribute__((unused)),
-                              unsigned long long i64 __attribute__((unused)))
-{
-  return -1;
-}
-
-
-int encryption_scheme_decrypt(const unsigned char* src __attribute__((unused)),
-                              unsigned int slen __attribute__((unused)),
-                              unsigned char* dst __attribute__((unused)),
-                              unsigned int* dlen __attribute__((unused)),
-                              struct st_encryption_scheme *scheme __attribute__((unused)),
-                              unsigned int key_version __attribute__((unused)),
-                              unsigned int i32_1 __attribute__((unused)),
-                              unsigned int i32_2 __attribute__((unused)),
-                              unsigned long long i64 __attribute__((unused)))
-{
-  return -1;
 }
 
 /* only those that included myisamchk.h may need and can use the below */
@@ -158,6 +121,5 @@ void _ma_check_print_error(HA_CHECK *param, const char *fmt,...)
   va_end(args);
   DBUG_VOID_RETURN;
 }
-
 #endif
 

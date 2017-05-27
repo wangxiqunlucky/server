@@ -36,7 +36,6 @@ Created 9/17/2000 Heikki Tuuri
 #include "row0types.h"
 #include "btr0pcur.h"
 #include "trx0types.h"
-#include "fil0crypt.h"
 
 // Forward declaration
 struct SysIndexCallback;
@@ -389,10 +388,8 @@ row_create_table_for_mysql(
 				(will be freed, or on DB_SUCCESS
 				added to the data dictionary cache) */
 	trx_t*		trx,	/*!< in/out: transaction */
-	bool		commit,	/*!< in: if true, commit the transaction */
-	fil_encryption_t mode,	/*!< in: encryption mode */
-	ulint		key_id)	/*!< in: encryption key_id */
-	__attribute__((nonnull, warn_unused_result));
+	bool		commit)	/*!< in: if true, commit the transaction */
+	MY_ATTRIBUTE((nonnull, warn_unused_result));
 /*********************************************************************//**
 Does an index creation operation for MySQL. TODO: currently failure
 to create an index results in dropping the whole table! This is no problem
@@ -614,7 +611,7 @@ struct mysql_row_templ_t {
 					Innobase record in the current index;
 					not defined if template_type is
 					ROW_MYSQL_WHOLE_ROW */
-	ibool	rec_field_is_prefix;	/* is this field in a prefix index? */
+	bool	rec_field_is_prefix;	/* is this field in a prefix index? */
 	ulint	rec_prefix_field_no;	/* record field, even if just a
 					prefix; same as rec_field_no when not a
 					prefix, otherwise rec_field_no is

@@ -17,6 +17,7 @@
 #include <my_global.h>
 #include <m_string.h>  /* strchr() */
 #include <m_ctype.h>  /* my_isspace() */
+#include <base64.h>
 
 #ifndef MAIN
 

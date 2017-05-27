@@ -2,7 +2,7 @@ SET SESSION query_response_time_exec_time_debug=100000;
 
 SET GLOBAL QUERY_RESPONSE_TIME_STATS=0;
 EVAL SET GLOBAL QUERY_RESPONSE_TIME_RANGE_BASE=$base;
-FLUSH QUERY_RESPONSE_TIME;
+SET GLOBAL query_response_time_flush=1;
 # Following two queries check works of FLUSH and 
 # respecting of "QUERY_RESPONSE_TIME_STATS" variable (see launchpad bug #855312)
 SELECT * FROM INFORMATION_SCHEMA.QUERY_RESPONSE_TIME;
@@ -36,6 +36,6 @@ SET SESSION query_response_time_exec_time_debug=100000;
 SET GLOBAL QUERY_RESPONSE_TIME_STATS=0;
 
 SHOW GLOBAL VARIABLES where Variable_name like 'QUERY_RESPONSE_TIME_RANGE_BASE';
-SHOW QUERY_RESPONSE_TIME;
+SELECT * FROM INFORMATION_SCHEMA.QUERY_RESPONSE_TIME;
 
 SET SESSION query_response_time_exec_time_debug=default;

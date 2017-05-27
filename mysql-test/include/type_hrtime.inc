@@ -25,12 +25,7 @@ alter table t1 engine=innodb;
 select * from t1 order by a;
 select * from t1 order by a+0;
 drop table t1;
-let attr=;
-if ($type == timestamp)
-{
-  let attr=NOT NULL DEFAULT CURRENT_TIMESTAMP(4) ON UPDATE CURRENT_TIMESTAMP(4);
-}
-eval create table t1 (a $type(4)$attr) engine=innodb;
+eval create table t1 (a $type(4)) engine=innodb;
 insert t1 values ('2010-12-11 01:02:03.456789');
 select * from t1;
 select extract(microsecond from a + interval 100 microsecond) from t1 where a>'2010-11-12 01:02:03.456';
@@ -98,12 +93,7 @@ drop table t1, t2;
 #
 # SP
 #
-let attr=;
-if ($type == timestamp)
-{
-  let attr=NOT NULL DEFAULT '0000-00-00 00:00:00.000000';
-}
-eval create table t1 (a $type(6)$attr, b $type(6)$attr);
+eval create table t1 (a $type(6), b $type(6));
 eval create procedure foo(x $type, y $type(4)) insert into t1 values (x, y);
 call foo('2010-02-03 4:5:6.789123', '2010-02-03 4:5:6.789123');
 select * from t1;

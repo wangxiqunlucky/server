@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1996, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2016, 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
@@ -496,8 +496,7 @@ trx_release_savepoint_for_mysql(
 {
 	trx_named_savept_t*	savep;
 
-	ut_ad(trx_state_eq(trx, TRX_STATE_ACTIVE, true)
-	      || trx_state_eq(trx, TRX_STATE_PREPARED, true));
+	ut_ad(trx_state_eq(trx, TRX_STATE_ACTIVE) || trx_state_eq(trx, TRX_STATE_PREPARED));
 	ut_ad(trx->in_mysql_trx_list);
 
 	savep = trx_savepoint_find(trx, savepoint_name);
@@ -806,6 +805,7 @@ DECLARE_THREAD(trx_rollback_or_clean_all_recovered)(
 			/*!< in: a dummy parameter required by
 			os_thread_create */
 {
+	my_thread_init();
 	ut_ad(!srv_read_only_mode);
 
 #ifdef UNIV_PFS_THREAD
@@ -816,6 +816,7 @@ DECLARE_THREAD(trx_rollback_or_clean_all_recovered)(
 
 	trx_rollback_or_clean_is_active = false;
 
+	my_thread_end();
 	/* We count the number of threads in os_thread_exit(). A created
 	thread should always use that to exit and not use return() to exit. */
 

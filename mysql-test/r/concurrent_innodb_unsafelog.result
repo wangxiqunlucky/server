@@ -1,5 +1,4 @@
 SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ;
-SET SQL_MODE="";
 SELECT @@global.tx_isolation;
 @@global.tx_isolation
 REPEATABLE-READ
@@ -787,4 +786,3 @@ eta	tipo	c
 ** connection default
 drop table t1;
 drop user mysqltest@localhost;
-SET SQL_MODE=default;

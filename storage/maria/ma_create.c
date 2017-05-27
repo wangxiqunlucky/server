@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Create a MARIA table */
 
@@ -20,7 +20,6 @@
 #include <my_bit.h>
 #include "ma_blockrec.h"
 #include "trnman_public.h"
-#include "ma_crypt.h"
 
 #if defined(MSDOS) || defined(__WIN__)
 #ifdef __WIN__
@@ -74,9 +73,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   my_bool forced_packed;
   myf     sync_dir=  0;
   uchar   *log_data= NULL;
-  my_bool encrypted= maria_encrypt_tables && datafile_type == BLOCK_RECORD;
-  my_bool insert_order= MY_TEST(flags & HA_PRESERVE_INSERT_ORDER);
-  uint crypt_page_header_space= 0;
   DBUG_ENTER("maria_create");
   DBUG_PRINT("enter", ("keys: %u  columns: %u  uniques: %u  flags: %u",
                       keys, columns, uniques, flags));
@@ -145,12 +141,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   forced_packed= 0;
   column_nr= 0;
 
-  if (encrypted)
-  {
-    DBUG_ASSERT(datafile_type == BLOCK_RECORD);
-    crypt_page_header_space= ma_crypt_get_data_page_header_space();
-  }
-
   for (column= columndef, end_column= column + columns ;
        column != end_column ;
        column++)
@@ -171,8 +161,7 @@ int maria_create(const char *name, enum data_file_type datafile_type,
       if (type == FIELD_SKIP_PRESPACE)
         type= column->type= FIELD_NORMAL; /* SKIP_PRESPACE not supported */
       if (type == FIELD_NORMAL &&
-          column->length > FULL_PAGE_SIZE2(maria_block_size,
-                                           crypt_page_header_space))
+          column->length > FULL_PAGE_SIZE(maria_block_size))
       {
         /* FIELD_NORMAL can't be split over many blocks, convert to a CHAR */
         type= column->type= FIELD_SKIP_ENDSPACE;
@@ -268,19 +257,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
     datafile_type= BLOCK_RECORD;
   }
 
-  if (encrypted)
-  {
-    /*
-       datafile_type is set (finally?)
-       update encryption that is only supported for BLOCK_RECORD
-    */
-    if (datafile_type != BLOCK_RECORD)
-    {
-      encrypted= FALSE;
-      crypt_page_header_space= 0;
-    }
-  }
-
   if (datafile_type == DYNAMIC_RECORD)
     options|= HA_OPTION_PACK_RECORD;	/* Must use packed records */
 
@@ -365,9 +341,9 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   {
     if (datafile_type == BLOCK_RECORD)
     {
-      uint rows_per_page=
-          ((maria_block_size - PAGE_OVERHEAD_SIZE_RAW - crypt_page_header_space)
-           / (min_pack_length + extra_header_size + DIR_ENTRY_SIZE));
+      uint rows_per_page= ((maria_block_size - PAGE_OVERHEAD_SIZE) /
+                           (min_pack_length + extra_header_size +
+                            DIR_ENTRY_SIZE));
       ulonglong data_file_length= ci->data_file_length;
       if (!data_file_length)
         data_file_length= ((((ulonglong) 1 << ((BLOCK_RECORD_POINTER_SIZE-1) *
@@ -690,20 +666,7 @@ int maria_create(const char *name, enum data_file_type datafile_type,
                                 (key_segs + unique_key_parts)*HA_KEYSEG_SIZE+
                                 columns*(MARIA_COLUMNDEF_SIZE + 2));
 
-  if (encrypted)
-  {
-    share.base.extra_options|= MA_EXTRA_OPTIONS_ENCRYPTED;
-
-    /* store crypt data in info */
-    info_length+= ma_crypt_get_file_length();
-  }
-
-  if (insert_order)
-  {
-    share.base.extra_options|= MA_EXTRA_OPTIONS_INSERT_ORDER;
-  }
-
-  DBUG_PRINT("info", ("info_length: %u", info_length));
+ DBUG_PRINT("info", ("info_length: %u", info_length));
   /* There are only 16 bits for the total header length. */
   if (info_length > 65535)
   {
@@ -726,7 +689,8 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   mi_int2store(share.state.header.base_pos,base_pos);
   share.state.header.data_file_type= share.data_file_type= datafile_type;
   share.state.header.org_data_file_type= org_datafile_type;
-  share.state.header.not_used= 0;
+  share.state.header.language= (ci->language ?
+				ci->language : default_charset_info->number);
 
   share.state.dellink = HA_OFFSET_ERROR;
   share.state.first_bitmap_with_space= 0;
@@ -739,8 +703,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   share.options=options;
   share.base.rec_reflength=pointer;
   share.base.block_size= maria_block_size;
-  share.base.language= (ci->language ? ci->language :
-                        default_charset_info->number);
 
   /*
     Get estimate for index file length (this may be wrong for FT keys)
@@ -939,6 +901,7 @@ int maria_create(const char *name, enum data_file_type datafile_type,
       sseg.language= 7;                         /* Binary */
       sseg.null_bit=0;
       sseg.bit_start=0;
+      sseg.bit_end=0;
       sseg.bit_length= 0;
       sseg.bit_pos= 0;
       sseg.length=SPLEN;
@@ -1040,13 +1003,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
   }
   if (_ma_column_nr_write(file, column_array, columns))
     goto err;
-
-  if (encrypted)
-  {
-    if (ma_crypt_create(&share) ||
-        ma_crypt_write(&share, file))
-      goto err;
-  }
 
   if ((kfile_size_before_extension= mysql_file_tell(file,MYF(0))) == MY_FILEPOS_ERROR)
     goto err;
@@ -1223,7 +1179,6 @@ int maria_create(const char *name, enum data_file_type datafile_type,
     mysql_mutex_unlock(&THR_LOCK_maria);
   res= 0;
   my_free((char*) rec_per_key_part);
-  ma_crypt_free(&share);
   errpos=0;
   if (mysql_file_close(file,MYF(0)))
     res= my_errno;
@@ -1256,7 +1211,6 @@ err_no_lock:
         mysql_file_delete(key_file_kfile, klinkname_ptr, MYF(sync_dir));
     }
   }
-  ma_crypt_free(&share);
   my_free(log_data);
   my_free(rec_per_key_part);
   DBUG_RETURN(my_errno=save_errno);		/* return the fatal errno */

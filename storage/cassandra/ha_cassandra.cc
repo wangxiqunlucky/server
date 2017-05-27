@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef USE_PRAGMA_IMPLEMENTATION
 #pragma implementation        // gcc: Class implementation
@@ -2283,7 +2283,7 @@ bool ha_cassandra::mrr_start_read()
     rowkey_converter->mariadb_to_cassandra(&cass_key, &cass_key_len);
 
     // Primitive buffer control
-    if ((ulong) se->add_lookup_key(cass_key, cass_key_len) >
+    if (se->add_lookup_key(cass_key, cass_key_len) >
         THDVAR(table->in_use, multiget_batch_size))
       break;
   }

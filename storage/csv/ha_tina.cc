@@ -61,16 +61,6 @@ TODO:
 #define CSN_EXT ".CSN"               // Files used during repair and update
 #define CSM_EXT ".CSM"               // Meta file
 
-struct ha_table_option_struct
-{
-  bool ietf_quotes;
-};
-
-ha_create_table_option csv_table_option_list[]=
-{
-  HA_TOPTION_BOOL("IETF_QUOTES", ietf_quotes, 0),
-  HA_TOPTION_END
-};
 
 static TINA_SHARE *get_share(const char *table_name, TABLE *table);
 static int free_share(TINA_SHARE *share);
@@ -174,7 +164,6 @@ static int tina_init_func(void *p)
   tina_hton->flags= (HTON_CAN_RECREATE | HTON_SUPPORT_LOG_TABLES | 
                      HTON_NO_PARTITION);
   tina_hton->tablefile_extensions= ha_tina_exts;
-  tina_hton->table_options= csv_table_option_list;
   return 0;
 }
 
@@ -300,7 +289,7 @@ static int read_meta_file(File meta_file, ha_rows *rows)
   mysql_file_seek(meta_file, 0, MY_SEEK_SET, MYF(0));
   if (mysql_file_read(meta_file, (uchar*)meta_buffer, META_BUFFER_SIZE, 0)
       != META_BUFFER_SIZE)
-    DBUG_RETURN(HA_ERR_CRASHED_ON_USAGE);
+    DBUG_RETURN(my_errno= HA_ERR_CRASHED_ON_USAGE);
 
   /*
     Parse out the meta data, we ignore version at the moment
@@ -429,10 +418,13 @@ static int free_share(TINA_SHARE *share)
   int result_code= 0;
   if (!--share->use_count){
     /* Write the meta file. Mark it as crashed if needed. */
-    (void)write_meta_file(share->meta_file, share->rows_recorded,
-                          share->crashed ? TRUE :FALSE);
-    if (mysql_file_close(share->meta_file, MYF(0)))
-      result_code= 1;
+    if (share->meta_file != -1)
+    {
+      (void)write_meta_file(share->meta_file, share->rows_recorded,
+                            share->crashed ? TRUE :FALSE);
+      if (mysql_file_close(share->meta_file, MYF(0)))
+        result_code= 1;
+    }
     if (share->tina_write_opened)
     {
       if (mysql_file_close(share->tina_write_filedes, MYF(0)))
@@ -524,7 +516,7 @@ int ha_tina::encode_quote(uchar *buf)
   char attribute_buffer[1024];
   String attribute(attribute_buffer, sizeof(attribute_buffer),
                    &my_charset_bin);
-  bool ietf_quotes= table_share->option_struct->ietf_quotes;
+
   my_bitmap_map *org_bitmap= dbug_tmp_use_all_columns(table, table->read_set);
   buffer.length(0);
 
@@ -567,7 +559,7 @@ int ha_tina::encode_quote(uchar *buf)
       {
         if (*ptr == '"')
         {
-          buffer.append(ietf_quotes ? '"' : '\\');
+          buffer.append('\\');
           buffer.append('"');
         }
         else if (*ptr == '\r')
@@ -659,7 +651,6 @@ int ha_tina::find_current_row(uchar *buf)
   my_bitmap_map *org_bitmap;
   int error;
   bool read_all;
-  bool ietf_quotes= table_share->option_struct->ietf_quotes;
   DBUG_ENTER("ha_tina::find_current_row");
 
   free_root(&blobroot, MYF(0));
@@ -693,10 +684,8 @@ int ha_tina::find_current_row(uchar *buf)
                      a) If end of current field is reached, move
                         to next field and jump to step 2.3
                      b) If current character is a \\ handle
-                        \\n, \\r, \\, and \\" if not in ietf_quotes mode
-                     c) if in ietf_quotes mode and the current character is
-                        a ", handle ""
-                     d) else append the current character into the buffer
+                        \\n, \\r, \\, \\"
+                     c) else append the current character into the buffer
                         before checking that EOL has not been reached.
           2.2) If the current character does not begin with a quote
                2.2.1) Until EOL has not been reached
@@ -737,25 +726,15 @@ int ha_tina::find_current_row(uchar *buf)
           curr_offset+= 2;
           break;
         }
-        if (ietf_quotes && curr_char == '"'
-            && file_buff->get_value(curr_offset + 1) == '"')
+        if (curr_char == '\\' && curr_offset != (end_offset - 1))
         {
-          /* Embedded IETF quote */
-          curr_offset++;
-          buffer.append('"');
-        }
-        else if (curr_char == '\\' && curr_offset != (end_offset - 1))
-        {
-          /* A quote followed by something else than a comma, end of line, or
-          (in IETF mode) another quote will be handled as a regular
-          character. */
           curr_offset++;
           curr_char= file_buff->get_value(curr_offset);
           if (curr_char == 'r')
             buffer.append('\r');
           else if (curr_char == 'n' )
             buffer.append('\n');
-          else if (curr_char == '\\' || (!ietf_quotes && curr_char == '"'))
+          else if (curr_char == '\\' || curr_char == '"')
             buffer.append(curr_char);
           else  /* This could only happed with an externally created file */
           {
@@ -954,7 +933,7 @@ int ha_tina::open(const char *name, int mode, uint open_options)
   if (share->crashed && !(open_options & HA_OPEN_FOR_REPAIR))
   {
     free_share(share);
-    DBUG_RETURN(HA_ERR_CRASHED_ON_USAGE);
+    DBUG_RETURN(my_errno ? my_errno : HA_ERR_CRASHED_ON_USAGE);
   }
 
   local_data_file_version= share->data_file_version;
@@ -1505,13 +1484,13 @@ int ha_tina::repair(THD* thd, HA_CHECK_OPT* check_opt)
 
   /* Don't assert in field::val() functions */
   table->use_all_columns();
-  if (!(buf= (uchar*) my_malloc(table->s->reclength, MYF(MY_WME))))
-    DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
   /* position buffer to the start of the file */
   if (init_data_file())
     DBUG_RETURN(HA_ERR_CRASHED_ON_REPAIR);
 
+  if (!(buf= (uchar*) my_malloc(table->s->reclength, MYF(MY_WME))))
+    DBUG_RETURN(HA_ERR_OUT_OF_MEM);
   /*
     Local_saved_data_file_length is initialized during the lock phase.
     Sometimes this is not getting executed before ::repair (e.g. for
@@ -1595,9 +1574,9 @@ int ha_tina::repair(THD* thd, HA_CHECK_OPT* check_opt)
       DBUG_RETURN(my_errno ? my_errno : -1);
     share->tina_write_opened= FALSE;
   }
-  if (mysql_file_close(data_file, MYF(0)) ||
-      mysql_file_close(repair_file, MYF(0)) ||
-      mysql_file_rename(csv_key_file_data,
+  mysql_file_close(data_file, MYF(0));
+  mysql_file_close(repair_file, MYF(0));
+  if (mysql_file_rename(csv_key_file_data,
                         repaired_fname, share->data_file_name, MYF(0)))
     DBUG_RETURN(-1);
 
@@ -1719,12 +1698,13 @@ int ha_tina::check(THD* thd, HA_CHECK_OPT* check_opt)
   DBUG_ENTER("ha_tina::check");
 
   old_proc_info= thd_proc_info(thd, "Checking table");
-  if (!(buf= (uchar*) my_malloc(table->s->reclength, MYF(MY_WME))))
-    DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
   /* position buffer to the start of the file */
    if (init_data_file())
      DBUG_RETURN(HA_ERR_CRASHED);
+
+  if (!(buf= (uchar*) my_malloc(table->s->reclength, MYF(MY_WME))))
+    DBUG_RETURN(HA_ERR_OUT_OF_MEM);
 
   /*
     Local_saved_data_file_length is initialized during the lock phase.
@@ -1765,13 +1745,9 @@ int ha_tina::reset(void)
 }
 
 
-bool ha_tina::check_if_incompatible_data(HA_CREATE_INFO *info_arg,
+bool ha_tina::check_if_incompatible_data(HA_CREATE_INFO *info,
 					   uint table_changes)
 {
-  if (info_arg->option_struct->ietf_quotes !=
-      table_share->option_struct->ietf_quotes)
-    return COMPATIBLE_DATA_NO;
-
   return COMPATIBLE_DATA_YES;
 }
 

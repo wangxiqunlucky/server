@@ -366,27 +366,17 @@ int str2my_decimal(uint mask, const char *str, my_decimal *d, char **end)
 
 
 int str2my_decimal(uint mask, const char *from, uint length,
-                   CHARSET_INFO *charset, my_decimal *decimal_value,
-                   const char **end);
-
-inline int str2my_decimal(uint mask, const char *from, uint length,
-                          CHARSET_INFO *charset, my_decimal *decimal_value)
-{
-  const char *end;
-  return str2my_decimal(mask, from, length, charset, decimal_value, &end);
-}
+                   CHARSET_INFO *charset, my_decimal *decimal_value);
 
 #if defined(MYSQL_SERVER) || defined(EMBEDDED_LIBRARY)
 inline
 int string2my_decimal(uint mask, const String *str, my_decimal *d)
 {
-  const char *end;
-  return str2my_decimal(mask, str->ptr(), str->length(), str->charset(),
-                        d, &end);
+  return str2my_decimal(mask, str->ptr(), str->length(), str->charset(), d);
 }
 
 
-my_decimal *date2my_decimal(const MYSQL_TIME *ltime, my_decimal *dec);
+my_decimal *date2my_decimal(MYSQL_TIME *ltime, my_decimal *dec);
 
 
 #endif /*defined(MYSQL_SERVER) || defined(EMBEDDED_LIBRARY) */
@@ -496,7 +486,7 @@ int my_decimal_intg(const my_decimal *a)
 }
 
 
-void my_decimal_trim(ulonglong *precision, uint *scale);
+void my_decimal_trim(ulong *precision, uint *scale);
 
 
 #endif /*my_decimal_h*/

@@ -11,12 +11,11 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "feedback.h"
 #include <sql_acl.h>
 #include <sql_parse.h>
-#include <sql_show.h>
 #include <time.h>
 
 namespace feedback {
@@ -121,7 +120,7 @@ static int prepare_for_fill(TABLE_LIST *tables)
                          strlen(i_s_feedback->table_name),
                          0, TL_READ);
   tables->schema_table= i_s_feedback;
-  tables->table= create_schema_table(thd, tables);
+  tables->table= i_s_feedback->create_table(thd, tables);
   if (!tables->table)
     return 1;
 
@@ -205,7 +204,7 @@ static void send_report(const char *when)
     /*
       otherwise, prepare the THD and TABLE_LIST,
       create and fill the temporary table with data just like
-      SELECT * FROM IFROEMATION_SCHEMA.feedback is doing,
+      SELECT * FROM INFORMATION_SCHEMA.FEEDBACK is doing,
       read and concatenate table data into a String.
     */
     if (!(thd= new THD()))

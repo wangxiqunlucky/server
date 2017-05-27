@@ -19,7 +19,6 @@
 # 2008-06-11 mleich Move t/is_triggers.test to this file and
 #                   create variants for embedded/non embedded server.
 #
-set global sql_mode="";
 
 let $engine_type       = MEMORY;
 let $other_engine_type = MyISAM;
@@ -258,4 +257,3 @@ ALTER TABLE information_schema.triggers RENAME information_schema.xtriggers;
 # Cleanup
 DROP DATABASE db_datadict;
 
-set global sql_mode=default;

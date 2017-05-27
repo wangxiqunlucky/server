@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* open an Aria table */
 
@@ -20,7 +20,6 @@
 #include "ma_rt_index.h"
 #include "ma_blockrec.h"
 #include <m_ctype.h>
-#include "ma_crypt.h"
 
 #if defined(MSDOS) || defined(__WIN__)
 #ifdef __WIN__
@@ -276,12 +275,11 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
   uint i,j,len,errpos,head_length,base_pos,keys, realpath_err,
     key_parts,unique_key_parts,fulltext_keys,uniques;
   uint internal_table= MY_TEST(open_flags & HA_OPEN_INTERNAL_TABLE);
-  uint file_version;
   size_t info_length;
   char name_buff[FN_REFLEN], org_name[FN_REFLEN], index_name[FN_REFLEN],
        data_name[FN_REFLEN];
   uchar *disk_cache, *disk_pos, *end_pos;
-  MARIA_HA info, *UNINIT_VAR(m_info), *old_info;
+  MARIA_HA info,*m_info,*old_info;
   MARIA_SHARE share_buff,*share;
   double *rec_per_key_part;
   ulong  *nulls_per_key_part;
@@ -291,6 +289,7 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
   File data_file= -1;
   DBUG_ENTER("maria_open");
 
+  LINT_INIT(m_info);
   kfile= -1;
   errpos= 0;
   head_length=sizeof(share_buff.state.header);
@@ -344,8 +343,8 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
     }
     share->mode=open_mode;
     errpos= 1;
-    if (mysql_file_pread(kfile,share->state.header.file_version, head_length,
-                         0, MYF(MY_NABP)))
+    if (mysql_file_pread(kfile,share->state.header.file_version, head_length, 0,
+                 MYF(MY_NABP)))
     {
       my_errno= HA_ERR_NOT_A_TABLE;
       goto err;
@@ -449,14 +448,6 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
 			    len,MARIA_BASE_INFO_SIZE));
     }
     disk_pos= _ma_base_info_read(disk_cache + base_pos, &share->base);
-    /*
-      Check if old version of Aria file. Version 0 has language
-      stored in header.not_used
-    */
-    file_version= (share->state.header.not_used == 0);
-    if (file_version == 0)
-      share->base.language= share->state.header.not_used;
-    
     share->state.state_length=base_pos;
     /* For newly opened tables we reset the error-has-been-printed flag */
     share->state.changed&= ~STATE_CRASHED_PRINTED;
@@ -624,12 +615,6 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
                              LSN_STORE_SIZE + TRANSID_SIZE :
                              0) + KEYPAGE_KEYID_SIZE + KEYPAGE_FLAG_SIZE +
                             KEYPAGE_USED_SIZE);
-
-    if (MY_TEST(share->base.extra_options & MA_EXTRA_OPTIONS_ENCRYPTED))
-    {
-      share->keypage_header+= ma_crypt_get_index_page_header_space(share);
-    }
-
     {
       HA_KEYSEG *pos=share->keyparts;
       uint32 ftkey_nr= 1;
@@ -863,12 +848,6 @@ MARIA_HA *maria_open(const char *name, int mode, uint open_flags)
     disk_pos= _ma_column_nr_read(disk_pos, share->column_nr,
                                  share->base.fields);
 
-    if (MY_TEST(share->base.extra_options & MA_EXTRA_OPTIONS_ENCRYPTED))
-    {
-      if (!(disk_pos= ma_crypt_read(share, disk_pos)))
-        goto err;
-    }
-
     if ((share->data_file_type == BLOCK_RECORD ||
          share->data_file_type == COMPRESSED_RECORD))
     {
@@ -1080,7 +1059,6 @@ err:
     (*share->once_end)(share);
     /* fall through */
   case 4:
-    ma_crypt_free(share);
     my_free(share);
     /* fall through */
   case 3:
@@ -1609,7 +1587,7 @@ uint _ma_base_info_write(File file, MARIA_BASE_INFO *base)
   mi_int2store(ptr,base->null_bytes);                   ptr+= 2;
   mi_int2store(ptr,base->original_null_bytes);	        ptr+= 2;
   mi_int2store(ptr,base->field_offsets);	        ptr+= 2;
-  mi_int2store(ptr,base->language);		        ptr+= 2;
+  mi_int2store(ptr,0);				        ptr+= 2; /* reserved */
   mi_int2store(ptr,base->block_size);	        	ptr+= 2;
   *ptr++= base->rec_reflength;
   *ptr++= base->key_reflength;
@@ -1652,7 +1630,7 @@ static uchar *_ma_base_info_read(uchar *ptr, MARIA_BASE_INFO *base)
   base->null_bytes= mi_uint2korr(ptr);			ptr+= 2;
   base->original_null_bytes= mi_uint2korr(ptr);		ptr+= 2;
   base->field_offsets= mi_uint2korr(ptr);		ptr+= 2;
-  base->language= mi_uint2korr(ptr);		        ptr+= 2;
+                                                        ptr+= 2;
   base->block_size= mi_uint2korr(ptr);			ptr+= 2;
 
   base->rec_reflength= *ptr++;
@@ -1717,10 +1695,10 @@ my_bool _ma_keyseg_write(File file, const HA_KEYSEG *keyseg)
   ulong pos;
 
   *ptr++= keyseg->type;
-  *ptr++= keyseg->language & 0xFF; /* Collation ID, low byte */
+  *ptr++= keyseg->language;
   *ptr++= keyseg->null_bit;
   *ptr++= keyseg->bit_start;
-  *ptr++= keyseg->language >> 8; /* Collation ID, high byte */
+  *ptr++= keyseg->bit_end;
   *ptr++= keyseg->bit_length;
   mi_int2store(ptr,keyseg->flag);	ptr+= 2;
   mi_int2store(ptr,keyseg->length);	ptr+= 2;
@@ -1739,7 +1717,7 @@ uchar *_ma_keyseg_read(uchar *ptr, HA_KEYSEG *keyseg)
    keyseg->language	= *ptr++;
    keyseg->null_bit	= *ptr++;
    keyseg->bit_start	= *ptr++;
-   keyseg->language	+= ((uint16) (*ptr++)) << 8;
+   keyseg->bit_end	= *ptr++;
    keyseg->bit_length   = *ptr++;
    keyseg->flag		= mi_uint2korr(ptr);  ptr+= 2;
    keyseg->length	= mi_uint2korr(ptr);  ptr+= 2;
@@ -1860,30 +1838,23 @@ uchar *_ma_column_nr_read(uchar *ptr, uint16 *offsets, uint columns)
 void _ma_set_data_pagecache_callbacks(PAGECACHE_FILE *file,
                                       MARIA_SHARE *share)
 {
-  pagecache_file_set_null_hooks(file);
   file->callback_data= (uchar*) share;
   file->flush_log_callback= &maria_flush_log_for_page_none; /* Do nothing */
-  file->post_write_hook= maria_page_write_failure;
 
   if (share->temporary)
   {
-    file->post_read_hook= &maria_page_crc_check_none;
-    file->pre_write_hook= &maria_page_filler_set_none;
+    file->read_callback=  &maria_page_crc_check_none;
+    file->write_callback= &maria_page_filler_set_none;
   }
   else
   {
-    file->post_read_hook= &maria_page_crc_check_data;
+    file->read_callback=  &maria_page_crc_check_data;
     if (share->options & HA_OPTION_PAGE_CHECKSUM)
-      file->pre_write_hook= &maria_page_crc_set_normal;
+      file->write_callback= &maria_page_crc_set_normal;
     else
-      file->pre_write_hook= &maria_page_filler_set_normal;
+      file->write_callback= &maria_page_filler_set_normal;
     if (share->now_transactional)
       file->flush_log_callback= maria_flush_log_for_page;
-  }
-
-  if (MY_TEST(share->base.extra_options & MA_EXTRA_OPTIONS_ENCRYPTED))
-  {
-    ma_crypt_set_data_pagecache_callbacks(file, share);
   }
 }
 
@@ -1899,31 +1870,25 @@ void _ma_set_data_pagecache_callbacks(PAGECACHE_FILE *file,
 void _ma_set_index_pagecache_callbacks(PAGECACHE_FILE *file,
                                        MARIA_SHARE *share)
 {
-  pagecache_file_set_null_hooks(file);
   file->callback_data= (uchar*) share;
   file->flush_log_callback= &maria_flush_log_for_page_none; /* Do nothing */
-  file->post_write_hook= maria_page_write_failure;
+  file->write_fail= maria_page_write_failure;
 
   if (share->temporary)
   {
-    file->post_read_hook= &maria_page_crc_check_none;
-    file->pre_write_hook= &maria_page_filler_set_none;
+    file->read_callback=  &maria_page_crc_check_none;
+    file->write_callback= &maria_page_filler_set_none;
   }
   else
   {
-    file->post_read_hook=  &maria_page_crc_check_index;
+    file->read_callback=  &maria_page_crc_check_index;
     if (share->options & HA_OPTION_PAGE_CHECKSUM)
-      file->pre_write_hook= &maria_page_crc_set_index;
+      file->write_callback= &maria_page_crc_set_index;
     else
-      file->pre_write_hook= &maria_page_filler_set_normal;
+      file->write_callback= &maria_page_filler_set_normal;
 
     if (share->now_transactional)
       file->flush_log_callback= maria_flush_log_for_page;
-  }
-
-  if (MY_TEST(share->base.extra_options & MA_EXTRA_OPTIONS_ENCRYPTED))
-  {
-    ma_crypt_set_index_pagecache_callbacks(file, share);
   }
 }
 

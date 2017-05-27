@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define MYSQL_SERVER
 #include <sql_class.h>
@@ -72,9 +72,9 @@ static struct st_mysql_sys_var *query_response_time_info_vars[]=
 
 ST_FIELD_INFO query_response_time_fields_info[] =
 {
-  { "TIME",  QRT_TIME_STRING_LENGTH,      MYSQL_TYPE_STRING,  0, 0,               "Time", 0 },
-  { "COUNT", MY_INT32_NUM_DECIMAL_DIGITS, MYSQL_TYPE_LONG,    0, MY_I_S_UNSIGNED, "Count", 0 },
-  { "TOTAL", QRT_TIME_STRING_LENGTH,      MYSQL_TYPE_STRING,  0, 0,               "Total", 0 },
+  { "TIME",  QRT_TIME_STRING_LENGTH,      MYSQL_TYPE_STRING,  0, 0,               "", SKIP_OPEN_TABLE },
+  { "COUNT", MY_INT32_NUM_DECIMAL_DIGITS, MYSQL_TYPE_LONG,    0, MY_I_S_UNSIGNED, "", SKIP_OPEN_TABLE },
+  { "TOTAL", QRT_TIME_STRING_LENGTH,      MYSQL_TYPE_STRING,  0, 0,               "", SKIP_OPEN_TABLE },
   { 0, 0, MYSQL_TYPE_NULL, 0, 0, 0, 0 }
 };
 
@@ -84,7 +84,6 @@ static int query_response_time_info_init(void *p)
   ST_SCHEMA_TABLE *i_s_query_response_time= (ST_SCHEMA_TABLE *) p;
   i_s_query_response_time->fields_info= query_response_time_fields_info;
   i_s_query_response_time->fill_table= query_response_time_fill;
-  i_s_query_response_time->reset_table= query_response_time_flush;
   query_response_time_init();
   return 0;
 }
@@ -144,7 +143,7 @@ maria_declare_plugin(query_response_time)
   NULL,
   query_response_time_info_vars,
   "1.0",
-  MariaDB_PLUGIN_MATURITY_STABLE
+  MariaDB_PLUGIN_MATURITY_GAMMA
 },
 {
   MYSQL_AUDIT_PLUGIN,
@@ -159,6 +158,6 @@ maria_declare_plugin(query_response_time)
   NULL,
   NULL,
   "1.0",
-  MariaDB_PLUGIN_MATURITY_STABLE
+  MariaDB_PLUGIN_MATURITY_GAMMA
 }
 maria_declare_plugin_end;

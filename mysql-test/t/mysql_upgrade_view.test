@@ -127,7 +127,6 @@ show create view v4;
 --replace_result $MYSQLTEST_VARDIR var
 --exec $MYSQL_UPGRADE --force 2>&1
 
-flush tables;
 show create view v1;
 show create view v2;
 show create view v3;
@@ -183,6 +182,5 @@ flush tables;
 # back to mariadb default
 drop table mysql.event;
 rename table mysql.ev_bk to mysql.event;
-remove_file $MYSQLD_DATADIR/mysql_upgrade_info;
 drop view v1,v2,v3;
 drop table t1;

@@ -209,10 +209,10 @@ rw_lock_create_func(
 # ifdef UNIV_SYNC_DEBUG
 	ulint		level,		/*!< in: level */
 # endif /* UNIV_SYNC_DEBUG */
-#endif /* UNIV_DEBUG */
-	const char*	cmutex_name,	/*!< in: mutex name */
 	const char*	cfile_name,	/*!< in: file name where created */
-	ulint		cline)		/*!< in: file line where created */
+	ulint		cline,		/*!< in: file line where created */
+#endif /* UNIV_DEBUG */
+	const char*	cmutex_name)	/*!< in: mutex name */
 {
 	/* If this is the very first time a synchronization object is
 	created, then the following call initializes the sync system. */
@@ -221,14 +221,15 @@ rw_lock_create_func(
 	mutex_create(rw_lock_mutex_key, rw_lock_get_mutex(lock),
 		     SYNC_NO_ORDER_CHECK);
 
-	lock->mutex.cfile_name = cfile_name;
-	lock->mutex.cline = cline;
-	lock->mutex.lock_name = cmutex_name;
-	ut_d(lock->mutex.ib_mutex_type = 1);
+	ut_d(lock->mutex.cfile_name = cfile_name);
+	ut_d(lock->mutex.cline = cline);
 
+	lock->mutex.cmutex_name = cmutex_name;
+	ut_d(lock->mutex.ib_mutex_type = 1);
 #else /* INNODB_RW_LOCKS_USE_ATOMICS */
 # ifdef UNIV_DEBUG
-	UT_NOT_USED(cmutex_name);
+	UT_NOT_USED(cfile_name);
+	UT_NOT_USED(cline);
 # endif
 #endif /* INNODB_RW_LOCKS_USE_ATOMICS */
 
@@ -251,12 +252,9 @@ rw_lock_create_func(
 
 	ut_d(lock->magic_n = RW_LOCK_MAGIC_N);
 
-	lock->cfile_name = cfile_name;
-	lock->cline = (unsigned int) cline;
 	lock->lock_name = cmutex_name;
+
 	lock->count_os_wait = 0;
-	lock->file_name = "not yet reserved";
-	lock->line = 0;
 	lock->last_s_file_name = "not yet reserved";
 	lock->last_x_file_name = "not yet reserved";
 	lock->last_s_line = 0;
@@ -288,21 +286,20 @@ rw_lock_create_func(
 # ifdef UNIV_SYNC_DEBUG
 	ulint		level,		/*!< in: level */
 # endif /* UNIV_SYNC_DEBUG */
-#endif /* UNIV_DEBUG */
-	const char*	cmutex_name,	/*!< in: mutex name */
 	const char*	cfile_name,	/*!< in: file name where created */
-	ulint		cline)		/*!< in: file line where created */
+	ulint		cline,		/*!< in: file line where created */
+#endif /* UNIV_DEBUG */
+	const char*	cmutex_name)	/*!< in: mutex name */
 {
 	rw_lock_create_func(&lock->base_lock,
 #ifdef UNIV_DEBUG
 # ifdef UNIV_SYNC_DEBUG
 			    level,
 # endif
-#endif
-			    cmutex_name,
 			    cfile_name,
-			    cline);
-
+			    cline,
+#endif
+			    cmutex_name);
 	lock->high_priority_s_waiters = 0;
 	os_event_create(&lock->high_priority_s_event);
 	lock->high_priority_x_waiters = 0;
@@ -658,12 +655,6 @@ rw_lock_x_lock_wait(
 					       file_name, line);
 #endif
 
-			if (srv_instrument_semaphores) {
-				lock->thread_id = os_thread_get_curr_id();
-				lock->file_name = file_name;
-				lock->line = line;
-			}
-
 			sync_array_wait_event(sync_arr, index);
 #ifdef UNIV_SYNC_DEBUG
 			rw_lock_remove_debug_info(
@@ -750,12 +741,6 @@ rw_lock_x_lock_low(
 #endif
 	lock->last_x_file_name = file_name;
 	lock->last_x_line = (unsigned int) line;
-
-	if (srv_instrument_semaphores) {
-		lock->thread_id = os_thread_get_curr_id();
-		lock->file_name = file_name;
-		lock->line = line;
-	}
 
 	return(TRUE);
 }

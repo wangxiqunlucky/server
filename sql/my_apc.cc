@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #ifndef MY_APC_STANDALONE
@@ -38,6 +38,45 @@ void Apc_target::init(mysql_mutex_t *target_mutex)
 #ifndef DBUG_OFF
   n_calls_processed= 0;
 #endif
+}
+
+
+/* 
+  Destroy the target. The target must be disabled when this call is made.
+*/
+void Apc_target::destroy()
+{
+  DBUG_ASSERT(!enabled);
+}
+
+
+/* 
+  Enter ther state where the target is available for serving APC requests
+*/
+void Apc_target::enable()
+{
+  /* Ok to do without getting/releasing the mutex: */
+  enabled++;
+}
+
+
+/* 
+  Make the target unavailable for serving APC requests. 
+  
+  @note
+    This call will serve all requests that were already enqueued
+*/
+
+void Apc_target::disable()
+{
+  bool process= FALSE;
+  DBUG_ASSERT(enabled);
+  mysql_mutex_lock(LOCK_thd_data_ptr);
+  if (!(--enabled))
+    process= TRUE;
+  mysql_mutex_unlock(LOCK_thd_data_ptr);
+  if (process)
+    process_apc_requests();
 }
 
 

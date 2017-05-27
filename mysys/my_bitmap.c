@@ -306,12 +306,6 @@ uint bitmap_set_next(MY_BITMAP *map)
 }
 
 
-/**
-  Set the specified number of bits in the bitmap buffer.
-
-  @param map         [IN]       Bitmap
-  @param prefix_size [IN]       Number of bits to be set
-*/
 void bitmap_set_prefix(MY_BITMAP *map, uint prefix_size)
 {
   uint prefix_bytes, prefix_bits, d;
@@ -325,12 +319,11 @@ void bitmap_set_prefix(MY_BITMAP *map, uint prefix_size)
   m+= prefix_bytes;
   if ((prefix_bits= prefix_size & 7))
   {
-    *(m++)= (1 << prefix_bits)-1;
-    // As the prefix bits are set, lets count this byte too as a prefix byte.
-    prefix_bytes ++;
+    *m++= (1 << prefix_bits)-1;
+    prefix_bytes++;
   }
   if ((d= no_bytes_in_map(map)-prefix_bytes))
-    memset(m, 0, d);
+    bzero(m, d);
 }
 
 
@@ -380,7 +373,6 @@ my_bool bitmap_is_clear_all(const MY_BITMAP *map)
   my_bitmap_map *data_ptr= map->bitmap;
   my_bitmap_map *end= map->last_word_ptr;
 
-  DBUG_ASSERT(map->n_bits > 0);
   for (; data_ptr < end; data_ptr++)
     if (*data_ptr)
       return FALSE;

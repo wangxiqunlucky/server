@@ -37,7 +37,6 @@ Copyright (c) 2006, 2015, Percona and/or its affiliates. All rights reserved.
 #ident "Copyright (c) 2006, 2015, Percona and/or its affiliates. All rights reserved."
 
 #include <iostream>
-#include <thread>
 #include "test.h"
 #include "locktree.h"
 #include "lock_request.h"
@@ -47,6 +46,15 @@ Copyright (c) 2006, 2015, Percona and/or its affiliates. All rights reserved.
 // expose the data race on the lock requests state.
 
 namespace toku {
+
+struct locker_arg {
+    locktree *_lt;
+    TXNID _id;
+    const DBT *_key;
+
+    locker_arg(locktree *lt, TXNID id, const DBT *key) : _lt(lt), _id(id), _key(key) {
+    }
+};
 
 static void locker_callback(void) {
     usleep(10000);
@@ -89,13 +97,20 @@ static void run_locker(locktree *lt, TXNID txnid, const DBT *key) {
 
         toku_pthread_yield();
         if ((i % 10) == 0)
-            std::cout << std::this_thread::get_id() << " " << i << std::endl;
+            std::cout << toku_pthread_self() << " " << i << std::endl;
     }
+}
+
+static void *locker(void *v_arg) {
+    locker_arg *arg = static_cast<locker_arg *>(v_arg);
+    run_locker(arg->_lt, arg->_id, arg->_key);
+    return arg;
 }
 
 } /* namespace toku */
 
 int main(void) {
+    int r;
 
     toku::locktree lt;
     DICTIONARY_ID dict_id = { 1 };
@@ -104,12 +119,18 @@ int main(void) {
     const DBT *one = toku::get_dbt(1);
 
     const int n_workers = 2;
-    std::thread worker[n_workers];
+    toku_pthread_t ids[n_workers];
     for (int i = 0; i < n_workers; i++) {
-        worker[i] = std::thread(toku::run_locker, &lt, i, one);
+        toku::locker_arg *arg = new toku::locker_arg(&lt, i, one);
+        r = toku_pthread_create(&ids[i], nullptr, toku::locker, arg);
+        assert_zero(r);
     }
     for (int i = 0; i < n_workers; i++) {
-        worker[i].join();
+        void *ret;
+        r = toku_pthread_join(ids[i], &ret);
+        assert_zero(r);
+        toku::locker_arg *arg = static_cast<toku::locker_arg *>(ret);
+        delete arg;
     }
 
     lt.release_reference();

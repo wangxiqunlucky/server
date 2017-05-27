@@ -1895,14 +1895,13 @@ DROP TABLE t1;
 --disable_warnings
 drop table if exists t_parent;
 --enable_warnings
-set @save_table_open_cache=@@global.table_open_cache;
+set @save_table_definition_cache=@@global.table_definition_cache;
 --echo #
---echo # Set @@global.table_open_cache to minimum
+--echo # Set @@global.table_definition_cache to minimum
 --echo #
-set @@global.table_open_cache=400;
-select @@table_open_cache;
+set @@global.table_definition_cache=400;
 set @a=null;
-let $1 = `select @@table_open_cache;`;
+let $1 = 400;
 --echo #
 --echo # Create 400 merge children
 --echo #
@@ -1936,7 +1935,7 @@ deallocate prepare stmt;
 --echo #
 --echo # Cleanup
 --echo #
-let $1 = `select @@table_open_cache;`;
+let $1 = 400;
 --disable_query_log
 while ($1)
 {
@@ -1945,7 +1944,7 @@ while ($1)
 }
 --enable_query_log
 drop table t_parent;
-set @@global.table_open_cache=@save_table_open_cache;
+set @@global.table_definition_cache=@save_table_definition_cache;
 
 #
 # WL#4144 - Lock MERGE engine children

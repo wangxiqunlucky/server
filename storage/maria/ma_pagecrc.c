@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "maria_def.h"
 
@@ -128,11 +128,11 @@ static my_bool maria_page_crc_check(uchar *page,
   @retval 0 OK
 */
 
-my_bool maria_page_crc_set_normal(PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_crc_set_normal(uchar *page,
+                                  pgcache_page_no_t page_no,
+                                  uchar *data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
+  MARIA_SHARE *share= (MARIA_SHARE *)data_ptr;
   int data_length= share->block_size - CRC_SIZE;
   uint32 crc= maria_page_crc((uint32) page_no, page, data_length);
   DBUG_ENTER("maria_page_crc_set_normal");
@@ -154,11 +154,11 @@ my_bool maria_page_crc_set_normal(PAGECACHE_IO_HOOK_ARGS *args)
   @retval 0 OK
 */
 
-my_bool maria_page_crc_set_index(PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_crc_set_index(uchar *page,
+                                 pgcache_page_no_t page_no,
+                                 uchar *data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
+  MARIA_SHARE *share= (MARIA_SHARE *)data_ptr;
   int data_length= _ma_get_page_used(share, page);
   uint32 crc= maria_page_crc((uint32) page_no, page, data_length);
   DBUG_ENTER("maria_page_crc_set_index");
@@ -185,16 +185,11 @@ my_bool maria_page_crc_set_index(PAGECACHE_IO_HOOK_ARGS *args)
   @retval 1 Error
 */
 
-my_bool maria_page_crc_check_data(int res, PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_crc_check_data(uchar *page,
+                                  pgcache_page_no_t page_no,
+                                  uchar *data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
-  if (res)
-  {
-    return 1;
-  }
-
+  MARIA_SHARE *share= (MARIA_SHARE *)data_ptr;
   return (maria_page_crc_check(page, (uint32) page_no, share,
                                MARIA_NO_CRC_NORMAL_PAGE,
                                share->block_size - CRC_SIZE));
@@ -212,15 +207,11 @@ my_bool maria_page_crc_check_data(int res, PAGECACHE_IO_HOOK_ARGS *args)
   @retval 1 Error
 */
 
-my_bool maria_page_crc_check_bitmap(int res, PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_crc_check_bitmap(uchar *page,
+                                    pgcache_page_no_t page_no,
+                                    uchar *data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
-  if (res)
-  {
-    return 1;
-  }
+  MARIA_SHARE *share= (MARIA_SHARE *)data_ptr;
   return (maria_page_crc_check(page, (uint32) page_no, share,
                                MARIA_NO_CRC_BITMAP_PAGE,
                                share->block_size - CRC_SIZE));
@@ -238,16 +229,12 @@ my_bool maria_page_crc_check_bitmap(int res, PAGECACHE_IO_HOOK_ARGS *args)
   @retval 1 Error
 */
 
-my_bool maria_page_crc_check_index(int res, PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_crc_check_index(uchar *page,
+                                   pgcache_page_no_t page_no,
+                                   uchar *data_ptr)
 {
-  uchar *page= args->page;
-  pgcache_page_no_t page_no= args->pageno;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
+  MARIA_SHARE *share= (MARIA_SHARE *)data_ptr;
   uint length= _ma_get_page_used(share, page);
-  if (res)
-  {
-    return 1;
-  }
   if (length > share->block_size - CRC_SIZE)
   {
     DBUG_PRINT("error", ("Wrong page length: %u", length));
@@ -266,11 +253,12 @@ my_bool maria_page_crc_check_index(int res, PAGECACHE_IO_HOOK_ARGS *args)
   @retval 1 Error
 */
 
-my_bool maria_page_crc_check_none(int res,
-                                  PAGECACHE_IO_HOOK_ARGS *args
-                                  __attribute__((unused)))
+my_bool maria_page_crc_check_none(uchar *page __attribute__((unused)),
+                                  pgcache_page_no_t page_no
+                                  __attribute__((unused)),
+                                  uchar *data_ptr __attribute__((unused)))
 {
-  return res != 0;
+  return 0;
 }
 
 
@@ -284,16 +272,14 @@ my_bool maria_page_crc_check_none(int res,
   @retval 0 OK
 */
 
-my_bool maria_page_filler_set_normal(PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_filler_set_normal(uchar *page,
+                                     pgcache_page_no_t page_no
+                                     __attribute__((unused)),
+                                     uchar *data_ptr)
 {
-  uchar *page= args->page;
-#ifndef DBUG_OFF
-  pgcache_page_no_t page_no= args->pageno;
-#endif
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
   DBUG_ENTER("maria_page_filler_set_normal");
   DBUG_ASSERT(page_no != 0);                    /* Catches some simple bugs */
-  int4store_aligned(page + share->block_size - CRC_SIZE,
+  int4store_aligned(page + ((MARIA_SHARE *)data_ptr)->block_size - CRC_SIZE,
                     MARIA_NO_CRC_NORMAL_PAGE);
   DBUG_RETURN(0);
 }
@@ -309,12 +295,13 @@ my_bool maria_page_filler_set_normal(PAGECACHE_IO_HOOK_ARGS *args)
   @retval 0 OK
 */
 
-my_bool maria_page_filler_set_bitmap(PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_page_filler_set_bitmap(uchar *page,
+                                     pgcache_page_no_t page_no
+                                     __attribute__((unused)),
+                                     uchar *data_ptr)
 {
-  uchar *page= args->page;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
   DBUG_ENTER("maria_page_filler_set_bitmap");
-  int4store_aligned(page + share->block_size - CRC_SIZE,
+  int4store_aligned(page + ((MARIA_SHARE *)data_ptr)->block_size - CRC_SIZE,
                     MARIA_NO_CRC_BITMAP_PAGE);
   DBUG_RETURN(0);
 }
@@ -326,13 +313,13 @@ my_bool maria_page_filler_set_bitmap(PAGECACHE_IO_HOOK_ARGS *args)
   @retval 0 OK
 */
 
-my_bool maria_page_filler_set_none(PAGECACHE_IO_HOOK_ARGS *args
-                                   __attribute__((unused)))
+my_bool maria_page_filler_set_none(uchar *page __attribute__((unused)),
+                                   pgcache_page_no_t page_no
+                                   __attribute__((unused)),
+                                   uchar *data_ptr __attribute__((unused)))
 {
 #ifdef HAVE_valgrind
-  uchar *page= args->page;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
-  int4store_aligned(page + share->block_size - CRC_SIZE,
+  int4store_aligned(page + ((MARIA_SHARE *)data_ptr)->block_size - CRC_SIZE,
                     0);
 #endif
   return 0;
@@ -345,10 +332,9 @@ my_bool maria_page_filler_set_none(PAGECACHE_IO_HOOK_ARGS *args
   @param data_ptr        Write callback data pointer (pointer to MARIA_SHARE)
 */
 
-void maria_page_write_failure(int error, PAGECACHE_IO_HOOK_ARGS *args)
+void maria_page_write_failure(uchar* data_ptr)
 {
-  if (error)
-    maria_mark_crashed_share((MARIA_SHARE *)args->data);
+  maria_mark_crashed_share((MARIA_SHARE *)data_ptr);
 }
 
 
@@ -363,11 +349,13 @@ void maria_page_write_failure(int error, PAGECACHE_IO_HOOK_ARGS *args)
   @retval 1  error
 */
 
-my_bool maria_flush_log_for_page(PAGECACHE_IO_HOOK_ARGS *args)
+my_bool maria_flush_log_for_page(uchar *page,
+                                 pgcache_page_no_t page_no
+                                 __attribute__((unused)),
+                                 uchar *data_ptr __attribute__((unused)))
 {
   LSN lsn;
-  uchar *page= args->page;
-  MARIA_SHARE *share= (MARIA_SHARE *)args->data;
+  MARIA_SHARE *share= (MARIA_SHARE*) data_ptr;
   DBUG_ENTER("maria_flush_log_for_page");
   /* share is 0 here only in unittest */
   DBUG_ASSERT(!share || share->page_type == PAGECACHE_LSN_PAGE);
@@ -384,14 +372,10 @@ my_bool maria_flush_log_for_page(PAGECACHE_IO_HOOK_ARGS *args)
 }
 
 
-my_bool maria_flush_log_for_page_none(PAGECACHE_IO_HOOK_ARGS *args
-                                      __attribute__((unused)))
-{
-  return 0;
-}
-
-my_bool maria_page_null_pre_read_hook(PAGECACHE_IO_HOOK_ARGS *args
-                                      __attribute__((unused)))
+my_bool maria_flush_log_for_page_none(uchar *page __attribute__((unused)),
+                                      pgcache_page_no_t page_no
+                                      __attribute__((unused)),
+                                      uchar *data_ptr __attribute__((unused)))
 {
   return 0;
 }

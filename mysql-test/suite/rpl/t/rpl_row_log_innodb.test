@@ -1,9 +1,11 @@
 ###################################
 # Wrapper for rpl_row_log.test    #
 # Added wrapper so that MyISAM &  #
-# Innodb         could all use the#
-# Same test.
+# Innodb and NDB could all use the#
+# Same test. NDB produced a diff  #
+# bin-log                         #
 ###################################
+-- source include/not_ndb_default.inc
 -- source include/have_binlog_format_row.inc
 -- source include/have_innodb.inc
 -- source include/master-slave.inc

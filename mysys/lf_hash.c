@@ -25,13 +25,12 @@
 #include <my_global.h>
 #include <m_string.h>
 #include <my_sys.h>
-#include <mysys_err.h>
 #include <my_bit.h>
 #include <lf.h>
 
 /* An element of the list */
 typedef struct {
-  intptr volatile link; /* a pointer to the next element in a list and a flag */
+  intptr volatile link; /* a pointer to the next element in a listand a flag */
   uint32 hashnr;        /* reversed hash number, for sorting                 */
   const uchar *key;
   size_t keylen;
@@ -59,84 +58,63 @@ typedef struct {
 #define PTR(V)      (LF_SLIST *)((V) & (~(intptr)1))
 #define DELETED(V)  ((V) & 1)
 
-/** walk the list, searching for an element or invoking a callback
-
+/*
+  DESCRIPTION
     Search for hashnr/key/keylen in the list starting from 'head' and
     position the cursor. The list is ORDER BY hashnr, key
 
-    @param head         start walking the list from this node
-    @param cs           charset for comparing keys, NULL if callback is used
-    @param hashnr       hash number to search for
-    @param key          key to search for OR data for the callback
-    @param keylen       length of the key to compare, 0 if callback is used
-    @param cursor       for returning the found element
-    @param pins         see lf_alloc-pin.c
-    @param callback     callback action, invoked for every element
+  RETURN
+    0 - not found
+    1 - found
 
-  @note
+  NOTE
     cursor is positioned in either case
     pins[0..2] are used, they are NOT removed on return
-    callback might see some elements twice (because of retries)
-
-  @return
-    if find: 0 - not found
-             1 - found
-    if callback:
-             0 - ok
-             1 - error (callbck returned 1)
 */
 static int l_find(LF_SLIST * volatile *head, CHARSET_INFO *cs, uint32 hashnr,
-                 const uchar *key, uint keylen, CURSOR *cursor, LF_PINS *pins,
-                 my_hash_walk_action callback)
+                 const uchar *key, uint keylen, CURSOR *cursor, LF_PINS *pins)
 {
   uint32       cur_hashnr;
   const uchar  *cur_key;
   uint         cur_keylen;
   intptr       link;
 
-  DBUG_ASSERT(!cs || !callback);        /* should not be set both */
-  DBUG_ASSERT(!keylen || !callback);    /* should not be set both */
-
 retry:
   cursor->prev= (intptr *)head;
   do { /* PTR() isn't necessary below, head is a dummy node */
     cursor->curr= (LF_SLIST *)(*cursor->prev);
-    lf_pin(pins, 1, cursor->curr);
+    _lf_pin(pins, 1, cursor->curr);
   } while (*cursor->prev != (intptr)cursor->curr && LF_BACKOFF);
-
   for (;;)
   {
     if (unlikely(!cursor->curr))
       return 0; /* end of the list */
-
-    cur_hashnr= cursor->curr->hashnr;
-    cur_keylen= cursor->curr->keylen;
-    cur_key= cursor->curr->key;
-
     do {
+      /* QQ: XXX or goto retry ? */
       link= cursor->curr->link;
       cursor->next= PTR(link);
-      lf_pin(pins, 0, cursor->next);
+      _lf_pin(pins, 0, cursor->next);
     } while (link != cursor->curr->link && LF_BACKOFF);
-
+    cur_hashnr= cursor->curr->hashnr;
+    cur_key= cursor->curr->key;
+    cur_keylen= cursor->curr->keylen;
+    if (*cursor->prev != (intptr)cursor->curr)
+    {
+      (void)LF_BACKOFF;
+      goto retry;
+    }
     if (!DELETED(link))
     {
-      if (unlikely(callback))
-      {
-        if (cur_hashnr & 1 && callback(cursor->curr + 1, (void*)key))
-          return 1;
-      }
-      else if (cur_hashnr >= hashnr)
+      if (cur_hashnr >= hashnr)
       {
         int r= 1;
         if (cur_hashnr > hashnr ||
-            (r= my_strnncoll(cs, cur_key, cur_keylen, key, keylen)) >= 0)
+            (r= my_strnncoll(cs, (uchar*) cur_key, cur_keylen, (uchar*) key,
+                             keylen)) >= 0)
           return !r;
       }
       cursor->prev= &(cursor->curr->link);
-      if (!(cur_hashnr & 1)) /* dummy node */
-        head= (LF_SLIST **)cursor->prev;
-      lf_pin(pins, 2, cursor->curr);
+      _lf_pin(pins, 2, cursor->curr);
     }
     else
     {
@@ -145,13 +123,16 @@ retry:
         and remove this deleted node
       */
       if (my_atomic_casptr((void **) cursor->prev,
-                           (void **) &cursor->curr, cursor->next) && LF_BACKOFF)
-        lf_alloc_free(pins, cursor->curr);
+                           (void **)(char*) &cursor->curr, cursor->next))
+        _lf_alloc_free(pins, cursor->curr);
       else
+      {
+        (void)LF_BACKOFF;
         goto retry;
+      }
     }
     cursor->curr= cursor->next;
-    lf_pin(pins, 1, cursor->curr);
+    _lf_pin(pins, 1, cursor->curr);
   }
 }
 
@@ -177,7 +158,7 @@ static LF_SLIST *l_insert(LF_SLIST * volatile *head, CHARSET_INFO *cs,
   for (;;)
   {
     if (l_find(head, cs, node->hashnr, node->key, node->keylen,
-              &cursor, pins, 0) &&
+              &cursor, pins) &&
         (flags & LF_HASH_UNIQUE))
     {
       res= 0; /* duplicate found */
@@ -196,12 +177,12 @@ static LF_SLIST *l_insert(LF_SLIST * volatile *head, CHARSET_INFO *cs,
       }
     }
   }
-  lf_unpin(pins, 0);
-  lf_unpin(pins, 1);
-  lf_unpin(pins, 2);
+  _lf_unpin(pins, 0);
+  _lf_unpin(pins, 1);
+  _lf_unpin(pins, 2);
   /*
     Note that cursor.curr is not pinned here and the pointer is unreliable,
-    the object may disappear anytime. But if it points to a dummy node, the
+    the object may dissapear anytime. But if it points to a dummy node, the
     pointer is safe, because dummy nodes are never freed - initialize_bucket()
     uses this fact.
   */
@@ -228,7 +209,7 @@ static int l_delete(LF_SLIST * volatile *head, CHARSET_INFO *cs, uint32 hashnr,
 
   for (;;)
   {
-    if (!l_find(head, cs, hashnr, key, keylen, &cursor, pins, 0))
+    if (!l_find(head, cs, hashnr, key, keylen, &cursor, pins))
     {
       res= 1; /* not found */
       break;
@@ -243,7 +224,7 @@ static int l_delete(LF_SLIST * volatile *head, CHARSET_INFO *cs, uint32 hashnr,
         /* and remove it from the list */
         if (my_atomic_casptr((void **)cursor.prev,
                              (void **)(char*)&cursor.curr, cursor.next))
-          lf_alloc_free(pins, cursor.curr);
+          _lf_alloc_free(pins, cursor.curr);
         else
         {
           /*
@@ -252,16 +233,16 @@ static int l_delete(LF_SLIST * volatile *head, CHARSET_INFO *cs, uint32 hashnr,
             (to ensure the number of "set DELETED flag" actions
             is equal to the number of "remove from the list" actions)
           */
-          l_find(head, cs, hashnr, key, keylen, &cursor, pins, 0);
+          l_find(head, cs, hashnr, key, keylen, &cursor, pins);
         }
         res= 0;
         break;
       }
     }
   }
-  lf_unpin(pins, 0);
-  lf_unpin(pins, 1);
-  lf_unpin(pins, 2);
+  _lf_unpin(pins, 0);
+  _lf_unpin(pins, 1);
+  _lf_unpin(pins, 2);
   return res;
 }
 
@@ -283,13 +264,13 @@ static LF_SLIST *l_search(LF_SLIST * volatile *head, CHARSET_INFO *cs,
                          LF_PINS *pins)
 {
   CURSOR cursor;
-  int res= l_find(head, cs, hashnr, key, keylen, &cursor, pins, 0);
+  int res= l_find(head, cs, hashnr, key, keylen, &cursor, pins);
   if (res)
-    lf_pin(pins, 2, cursor.curr);
+    _lf_pin(pins, 2, cursor.curr);
   else
-    lf_unpin(pins, 2);
-  lf_unpin(pins, 1);
-  lf_unpin(pins, 0);
+    _lf_unpin(pins, 2);
+  _lf_unpin(pins, 1);
+  _lf_unpin(pins, 0);
   return res ? cursor.curr : 0;
 }
 
@@ -308,23 +289,17 @@ static inline const uchar* hash_key(const LF_HASH *hash,
   @note, that the hash value is limited to 2^31, because we need one
   bit to distinguish between normal and dummy nodes.
 */
-static inline my_hash_value_type calc_hash(const CHARSET_INFO *cs,
-                                           const uchar *key,
-                                           size_t keylen)
+static inline uint calc_hash(LF_HASH *hash, const uchar *key, uint keylen)
 {
   ulong nr1= 1, nr2= 4;
-  cs->coll->hash_sort(cs, (uchar*) key, keylen, &nr1, &nr2);
-  return nr1;
+  hash->charset->coll->hash_sort(hash->charset, (uchar*) key, keylen,
+                                 &nr1, &nr2);
+  return nr1 & INT_MAX32;
 }
 
 #define MAX_LOAD 1.0    /* average number of elements in a bucket */
 
 static int initialize_bucket(LF_HASH *, LF_SLIST * volatile*, uint, LF_PINS *);
-
-static void default_initializer(LF_HASH *hash, void *dst, const void *src)
-{
-  memcpy(dst, src, hash->element_size);
-}
 
 /*
   Initializes lf_hash, the arguments are compatible with hash_init
@@ -333,13 +308,11 @@ static void default_initializer(LF_HASH *hash, void *dst, const void *src)
   lf_alloc and a size of memcpy'ed block size in lf_hash_insert. Typically
   they are the same, indeed. But LF_HASH::element_size can be decreased
   after lf_hash_init, and then lf_alloc will allocate larger block that
-  lf_hash_insert will copy over. It is desirable if part of the element
+  lf_hash_insert will copy over. It is desireable if part of the element
   is expensive to initialize - for example if there is a mutex or
   DYNAMIC_ARRAY. In this case they should be initialize in the
   LF_ALLOCATOR::constructor, and lf_hash_insert should not overwrite them.
-
-  The above works well with PODS. For more complex cases (e.g. C++ classes
-  with private members) use initializer function.
+  See wt_init() for example.
 */
 void lf_hash_init(LF_HASH *hash, uint element_size, uint flags,
                   uint key_offset, uint key_length, my_hash_get_key get_key,
@@ -356,14 +329,12 @@ void lf_hash_init(LF_HASH *hash, uint element_size, uint flags,
   hash->key_offset= key_offset;
   hash->key_length= key_length;
   hash->get_key= get_key;
-  hash->initializer= default_initializer;
-  hash->hash_function= calc_hash;
   DBUG_ASSERT(get_key ? !key_offset && !key_length : key_length);
 }
 
 void lf_hash_destroy(LF_HASH *hash)
 {
-  LF_SLIST *el, **head= (LF_SLIST **)lf_dynarray_value(&hash->array, 0);
+  LF_SLIST *el, **head= (LF_SLIST **)_lf_dynarray_value(&hash->array, 0);
 
   if (head)
   {
@@ -400,14 +371,15 @@ int lf_hash_insert(LF_HASH *hash, LF_PINS *pins, const void *data)
   int csize, bucket, hashnr;
   LF_SLIST *node, * volatile *el;
 
-  node= (LF_SLIST *)lf_alloc_new(pins);
+  lf_rwlock_by_pins(pins);
+  node= (LF_SLIST *)_lf_alloc_new(pins);
   if (unlikely(!node))
     return -1;
-  hash->initializer(hash, node + 1, data);
+  memcpy(node+1, data, hash->element_size);
   node->key= hash_key(hash, (uchar *)(node+1), &node->keylen);
-  hashnr= hash->hash_function(hash->charset, node->key, node->keylen) & INT_MAX32;
+  hashnr= calc_hash(hash, node->key, node->keylen);
   bucket= hashnr % hash->size;
-  el= lf_dynarray_lvalue(&hash->array, bucket);
+  el= _lf_dynarray_lvalue(&hash->array, bucket);
   if (unlikely(!el))
     return -1;
   if (*el == NULL && unlikely(initialize_bucket(hash, el, bucket, pins)))
@@ -415,12 +387,14 @@ int lf_hash_insert(LF_HASH *hash, LF_PINS *pins, const void *data)
   node->hashnr= my_reverse_bits(hashnr) | 1; /* normal node */
   if (l_insert(el, hash->charset, node, pins, hash->flags))
   {
-    lf_alloc_free(pins, node);
+    _lf_alloc_free(pins, node);
+    lf_rwunlock_by_pins(pins);
     return 1;
   }
   csize= hash->size;
   if ((my_atomic_add32(&hash->count, 1)+1.0) / csize > MAX_LOAD)
     my_atomic_cas32(&hash->size, &csize, csize*2);
+  lf_rwunlock_by_pins(pins);
   return 0;
 }
 
@@ -432,31 +406,36 @@ int lf_hash_insert(LF_HASH *hash, LF_PINS *pins, const void *data)
   RETURN
     0 - deleted
     1 - didn't (not found)
+   -1 - out of memory
   NOTE
     see l_delete() for pin usage notes
 */
 int lf_hash_delete(LF_HASH *hash, LF_PINS *pins, const void *key, uint keylen)
 {
   LF_SLIST * volatile *el;
-  uint bucket, hashnr;
+  uint bucket, hashnr= calc_hash(hash, (uchar *)key, keylen);
 
-  hashnr= hash->hash_function(hash->charset, (uchar *)key, keylen) & INT_MAX32;
-
-  /* hide OOM errors - if we cannot initialize a bucket, try the previous one */
-  for (bucket= hashnr % hash->size; ;bucket= my_clear_highest_bit(bucket))
-  {
-    el= lf_dynarray_lvalue(&hash->array, bucket);
-    if (el && (*el || initialize_bucket(hash, el, bucket, pins) == 0))
-      break;
-    if (unlikely(bucket == 0))
-      return 1; /* if there's no bucket==0, the hash is empty */
-  }
+  bucket= hashnr % hash->size;
+  lf_rwlock_by_pins(pins);
+  el= _lf_dynarray_lvalue(&hash->array, bucket);
+  if (unlikely(!el))
+    return -1;
+  /*
+    note that we still need to initialize_bucket here,
+    we cannot return "node not found", because an old bucket of that
+    node may've been split and the node was assigned to a new bucket
+    that was never accessed before and thus is not initialized.
+  */
+  if (*el == NULL && unlikely(initialize_bucket(hash, el, bucket, pins)))
+    return -1;
   if (l_delete(el, hash->charset, my_reverse_bits(hashnr) | 1,
               (uchar *)key, keylen, pins))
   {
+    lf_rwunlock_by_pins(pins);
     return 1;
   }
   my_atomic_add32(&hash->count, -1);
+  lf_rwunlock_by_pins(pins);
   return 0;
 }
 
@@ -465,71 +444,27 @@ int lf_hash_delete(LF_HASH *hash, LF_PINS *pins, const void *key, uint keylen)
     a pointer to an element with the given key (if a hash is not unique and
     there're many elements with this key - the "first" matching element)
     NULL         if nothing is found
+    MY_ERRPTR    if OOM
 
   NOTE
     see l_search() for pin usage notes
 */
-void *lf_hash_search_using_hash_value(LF_HASH *hash, LF_PINS *pins,
-                                      my_hash_value_type hashnr,
-                                      const void *key, uint keylen)
-{
-  LF_SLIST * volatile *el, *found;
-  uint bucket;
-
-  /* hide OOM errors - if we cannot initialize a bucket, try the previous one */
-  for (bucket= hashnr % hash->size; ;bucket= my_clear_highest_bit(bucket))
-  {
-    el= lf_dynarray_lvalue(&hash->array, bucket);
-    if (el && (*el || initialize_bucket(hash, el, bucket, pins) == 0))
-      break;
-    if (unlikely(bucket == 0))
-      return 0; /* if there's no bucket==0, the hash is empty */
-  }
-  found= l_search(el, hash->charset, my_reverse_bits(hashnr) | 1,
-                 (uchar *)key, keylen, pins);
-  return found ? found+1 : 0;
-}
-
-
-/**
-   Iterate over all elements in hash and call function with the element
-
-   @note
-   If one of 'action' invocations returns 1 the iteration aborts.
-   'action' might see some elements twice!
-
-   @retval 0    ok
-   @retval 1    error (action returned 1)
-*/
-int lf_hash_iterate(LF_HASH *hash, LF_PINS *pins,
-                    my_hash_walk_action action, void *argument)
-{
-  CURSOR cursor;
-  uint bucket= 0;
-  int res;
-  LF_SLIST * volatile *el;
-
-  el= lf_dynarray_lvalue(&hash->array, bucket);
-  if (unlikely(!el))
-    return 0; /* if there's no bucket==0, the hash is empty */
-  if (*el == NULL && unlikely(initialize_bucket(hash, el, bucket, pins)))
-    return 0; /* if there's no bucket==0, the hash is empty */
-
-  res= l_find(el, 0, 0, (uchar*)argument, 0, &cursor, pins, action);
-
-  lf_unpin(pins, 2);
-  lf_unpin(pins, 1);
-  lf_unpin(pins, 0);
-  return res;
-}
-
 void *lf_hash_search(LF_HASH *hash, LF_PINS *pins, const void *key, uint keylen)
 {
-  return lf_hash_search_using_hash_value(hash, pins,
-                                         hash->hash_function(hash->charset,
-                                                             (uchar*) key,
-                                                             keylen) & INT_MAX32,
-                                         key, keylen);
+  LF_SLIST * volatile *el, *found;
+  uint bucket, hashnr= calc_hash(hash, (uchar *)key, keylen);
+
+  bucket= hashnr % hash->size;
+  lf_rwlock_by_pins(pins);
+  el= _lf_dynarray_lvalue(&hash->array, bucket);
+  if (unlikely(!el))
+    return MY_ERRPTR;
+  if (*el == NULL && unlikely(initialize_bucket(hash, el, bucket, pins)))
+    return MY_ERRPTR;
+  found= l_search(el, hash->charset, my_reverse_bits(hashnr) | 1,
+                 (uchar *)key, keylen, pins);
+  lf_rwunlock_by_pins(pins);
+  return found ? found+1 : 0;
 }
 
 static const uchar *dummy_key= (uchar*)"";
@@ -545,12 +480,15 @@ static int initialize_bucket(LF_HASH *hash, LF_SLIST * volatile *node,
   uint parent= my_clear_highest_bit(bucket);
   LF_SLIST *dummy= (LF_SLIST *)my_malloc(sizeof(LF_SLIST), MYF(MY_WME));
   LF_SLIST **tmp= 0, *cur;
-  LF_SLIST * volatile *el= lf_dynarray_lvalue(&hash->array, parent);
+  LF_SLIST * volatile *el= _lf_dynarray_lvalue(&hash->array, parent);
   if (unlikely(!el || !dummy))
     return -1;
   if (*el == NULL && bucket &&
       unlikely(initialize_bucket(hash, el, parent, pins)))
+  {
+    my_free(dummy);
     return -1;
+  }
   dummy->hashnr= my_reverse_bits(bucket) | 0; /* dummy node */
   dummy->key= dummy_key;
   dummy->keylen= 0;

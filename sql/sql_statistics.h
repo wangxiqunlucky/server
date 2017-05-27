@@ -52,8 +52,7 @@ enum enum_table_stat_col
 {
   TABLE_STAT_DB_NAME,
   TABLE_STAT_TABLE_NAME,
-  TABLE_STAT_CARDINALITY,
-  TABLE_STAT_N_FIELDS
+  TABLE_STAT_CARDINALITY
 };
 
 enum enum_column_stat_col
@@ -68,8 +67,7 @@ enum enum_column_stat_col
   COLUMN_STAT_AVG_FREQUENCY,
   COLUMN_STAT_HIST_SIZE,
   COLUMN_STAT_HIST_TYPE,
-  COLUMN_STAT_HISTOGRAM,
-  COLUMN_STAT_N_FIELDS
+  COLUMN_STAT_HISTOGRAM
 };
 
 enum enum_index_stat_col
@@ -78,8 +76,7 @@ enum enum_index_stat_col
   INDEX_STAT_TABLE_NAME,
   INDEX_STAT_INDEX_NAME,
   INDEX_STAT_PREFIX_ARITY,
-  INDEX_STAT_AVG_FREQUENCY,
-  INDEX_STAT_N_FIELDS
+  INDEX_STAT_AVG_FREQUENCY
 };
 
 inline
@@ -110,7 +107,6 @@ double get_column_range_cardinality(Field *field,
                                     key_range *min_endp,
                                     key_range *max_endp,
                                     uint range_flag);
-bool is_stat_table(const char *db, const char *table);
 
 class Histogram
 {

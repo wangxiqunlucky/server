@@ -11,7 +11,7 @@
 
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
-  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define MYSQL_SERVER 1
 #include "mysql_version.h"
@@ -517,7 +517,6 @@ int spider_free_share_alloc(
 ) {
   int roop_count;
   DBUG_ENTER("spider_free_share_alloc");
-  if (share->dbton_bitmap)
   {
     for (roop_count = SPIDER_DBTON_SIZE - 1; roop_count >= 0; roop_count--)
     {
@@ -6340,7 +6339,7 @@ int spider_db_init(
       "?LOCK_xid_cache@@3PAUst_mysql_mutex@@A"));
   spd_db_att_xid_cache = *((HASH **)
     GetProcAddress(current_module, "?xid_cache@@3PAUst_hash@@A"));
-#elif MYSQL_VERSION_ID < 100103
+#else
   spd_db_att_LOCK_xid_cache = (pthread_mutex_t *)
 #if MYSQL_VERSION_ID < 50500
     GetProcAddress(current_module,
@@ -6369,7 +6368,7 @@ int spider_db_init(
   spd_db_att_xid_cache_split_num = &opt_xid_cache_split_num;
   spd_db_att_LOCK_xid_cache = LOCK_xid_cache;
   spd_db_att_xid_cache = xid_cache;
-#elif MYSQL_VERSION_ID < 100103
+#else
   spd_db_att_LOCK_xid_cache = &LOCK_xid_cache;
   spd_db_att_xid_cache = &xid_cache;
 #endif

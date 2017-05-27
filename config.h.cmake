@@ -45,7 +45,6 @@
 #cmakedefine HAVE_INTTYPES_H 1
 #cmakedefine HAVE_KQUEUE 1
 #cmakedefine HAVE_LIMITS_H 1
-#cmakedefine HAVE_LINK_H 1
 #cmakedefine HAVE_LINUX_UNISTD_H 1
 #cmakedefine HAVE_LOCALE_H 1
 #cmakedefine HAVE_MALLOC_H 1
@@ -87,7 +86,6 @@
 #cmakedefine HAVE_SYS_UTSNAME_H 1
 #cmakedefine HAVE_SYS_STAT_H 1
 #cmakedefine HAVE_SYS_STREAM_H 1
-#cmakedefine HAVE_SYS_SYSCALL_H 1
 #cmakedefine HAVE_SYS_TERMCAP_H 1
 #cmakedefine HAVE_SYS_TIMEB_H 1
 #cmakedefine HAVE_SYS_TIMES_H 1
@@ -95,7 +93,6 @@
 #cmakedefine HAVE_SYS_TYPES_H 1
 #cmakedefine HAVE_SYS_UN_H 1
 #cmakedefine HAVE_SYS_VADVISE_H 1
-#cmakedefine HAVE_SYS_STATVFS_H 1
 #cmakedefine HAVE_UCONTEXT_H 1
 #cmakedefine HAVE_TERM_H 1
 #cmakedefine HAVE_TERMBITS_H 1
@@ -121,7 +118,6 @@
 #cmakedefine HAVE_LIBCRYPT 1
 #cmakedefine HAVE_LIBMTMALLOC 1
 #cmakedefine HAVE_LIBWRAP 1
-#cmakedefine HAVE_SYSTEMD 1
 /* Does "struct timespec" have a "sec" and "nsec" field? */
 #cmakedefine HAVE_TIMESPEC_TS_SEC 1
 
@@ -167,7 +163,6 @@
 #cmakedefine HAVE_FSYNC 1
 #cmakedefine HAVE_FTIME 1
 #cmakedefine HAVE_GETADDRINFO 1
-#cmakedefine HAVE_GETIFADDRS 1
 #cmakedefine HAVE_GETCWD 1
 #cmakedefine HAVE_GETHOSTBYADDR_R 1
 #cmakedefine HAVE_GETHRTIME 1
@@ -219,13 +214,9 @@
 #cmakedefine HAVE_POLL 1
 #cmakedefine HAVE_PORT_CREATE 1
 #cmakedefine HAVE_POSIX_FALLOCATE 1
-#cmakedefine HAVE_LINUX_FALLOC_H 1
-#cmakedefine HAVE_FALLOCATE 1
-#cmakedefine HAVE_FALLOC_PUNCH_HOLE_AND_KEEP_SIZE 1
 #cmakedefine HAVE_PREAD 1
 #cmakedefine HAVE_PAUSE_INSTRUCTION 1
 #cmakedefine HAVE_FAKE_PAUSE_INSTRUCTION 1
-#cmakedefine HAVE_HMT_PRIORITY_INSTRUCTION 1
 #cmakedefine HAVE_RDTSCLL 1
 #cmakedefine HAVE_READ_REAL_TIME 1
 #cmakedefine HAVE_PTHREAD_ATTR_CREATE 1
@@ -407,7 +398,7 @@
 
 #cmakedefine HAVE_MBSTATE_T 1
 
-#cmakedefine MAX_INDEXES @MAX_INDEXES@
+#define MAX_INDEXES 64
 
 #cmakedefine QSORT_TYPE_IS_VOID 1
 #cmakedefine RETQSORTTYPE @RETQSORTTYPE@
@@ -469,7 +460,7 @@
 
 #cmakedefine HAVE_WEAK_SYMBOL 1
 #cmakedefine HAVE_ABI_CXA_DEMANGLE 1
-#cmakedefine HAVE_ATTRIBUTE_CLEANUP 1
+
 
 #cmakedefine HAVE_POSIX_SIGNALS 1
 #cmakedefine HAVE_BSD_SIGNALS 1
@@ -480,6 +471,7 @@
 #cmakedefine HAVE_SOLARIS_STYLE_GETHOST 1
 
 #cmakedefine MY_ATOMIC_MODE_DUMMY 1
+#cmakedefine MY_ATOMIC_MODE_RWLOCKS 1
 #cmakedefine HAVE_GCC_ATOMIC_BUILTINS 1
 #cmakedefine HAVE_GCC_C11_ATOMICS 1
 #cmakedefine HAVE_SOLARIS_ATOMIC 1
@@ -546,6 +538,7 @@
 #cmakedefine ENABLED_LOCAL_INFILE 1
 #cmakedefine ENABLED_PROFILING 1
 #cmakedefine EXTRA_DEBUG 1
+#cmakedefine BACKUP_TEST 1
 #cmakedefine CYBOZU 1
 #cmakedefine USE_SYMDIR 1
 
@@ -601,8 +594,7 @@
 #cmakedefine HAVE_CHARSET_utf32 1
 #cmakedefine HAVE_UCA_COLLATIONS 1
 #cmakedefine HAVE_COMPRESS 1
-#cmakedefine HAVE_EncryptAes128Ctr 1
-#cmakedefine HAVE_EncryptAes128Gcm 1
+
 
 /*
   Stuff that always need to be defined (compile breaks without it)
@@ -624,6 +616,10 @@
 #cmakedefine WITH_CSV_STORAGE_ENGINE 1
 #cmakedefine WITH_PARTITION_STORAGE_ENGINE 1
 #cmakedefine WITH_PERFSCHEMA_STORAGE_ENGINE 1
+#cmakedefine WITH_NDBCLUSTER_STORAGE_ENGINE 1
+#if (WITH_NDBCLUSTER_STORAGE_ENGINE) && !defined(EMBEDDED_LIBRARY)
+# define HAVE_NDB_BINLOG 1
+#endif
 #cmakedefine WITH_ARIA_STORAGE_ENGINE 1
 #cmakedefine USE_ARIA_FOR_TMP_TABLES 1
 
@@ -659,35 +655,12 @@
 #cmakedefine SIZEOF_TIME_T @SIZEOF_TIME_T@
 #cmakedefine TIME_T_UNSIGNED @TIME_T_UNSIGNED@
 
-#ifndef EMBEDDED_LIBRARY
-#cmakedefine WSREP_INTERFACE_VERSION "@WSREP_INTERFACE_VERSION@"
-#cmakedefine WITH_WSREP 1
-#cmakedefine WSREP_PROC_INFO 1
-#endif
-
 #ifdef _AIX
 /*
   AIX includes inttypes.h from sys/types.h
   Explicitly request format macros before the first inclusion of inttypes.h
 */
 #define __STDC_FORMAT_MACROS
-#endif
-
-/*
-  stat structure (from <sys/stat.h>) is conditionally defined
-  to have different layout and size depending on the defined macros.
-  The correct macro is defined in my_config.h, which means it MUST be
-  included first (or at least before <features.h> - so, practically,
-  before including any system headers).
-
-  Check the include order by looking at __GLIBC__ (defined in <features.h>)
-
-  But we cannot force all third-party clients/connectors to include
-  my_config.h first. So, their crashes are their responsibility,
-  we enable this check only for MariaDB sources (SAFE_MUTEX check).
-*/
-#if defined(__GLIBC__) && defined(SAFE_MUTEX)
-#error <my_config.h> MUST be included first!
 #endif
 
 #endif

@@ -216,7 +216,9 @@ enum ESphGroupBy
 	SPH_GROUPBY_WEEK	= 1,	///< group by week
 	SPH_GROUPBY_MONTH	= 2,	///< group by month
 	SPH_GROUPBY_YEAR	= 3,	///< group by year
-	SPH_GROUPBY_ATTR	= 4		///< group by attribute value
+	SPH_GROUPBY_ATTR	= 4,	///< group by attribute value
+	SPH_GROUPBY_ATTRPAIR	= 5,	///< group by sequential attrs pair (rendered redundant by 64bit attrs support; removed)
+	SPH_GROUPBY_MULTIPLE	= 6 	///< group by on multiple attribute values
 };
 
 /// known attribute types
@@ -857,9 +859,9 @@ bool sphinx_show_status ( THD * thd )
 	}
 	CSphTLS * pTls = (CSphTLS*) thd->ha_data[sphinx_hton.slot];
 
-	field_list.push_back ( new Item_empty_string ( thd, "Type", 10 ) );
-	field_list.push_back ( new Item_empty_string ( thd, "Name", FN_REFLEN ) );
-	field_list.push_back ( new Item_empty_string ( thd, "Status", 10 ) );
+	field_list.push_back ( new Item_empty_string ( "Type", 10 ) );
+	field_list.push_back ( new Item_empty_string ( "Name", FN_REFLEN ) );
+	field_list.push_back ( new Item_empty_string ( "Status", 10 ) );
 	if ( protocol->send_fields ( &field_list, Protocol::SEND_NUM_ROWS | Protocol::SEND_EOF ) )
 		SPH_RET(TRUE);
 
@@ -911,7 +913,7 @@ bool sphinx_show_status ( THD * thd )
 	}
 
 	// show last error or warning (either in addition to stats, or on their own)
-	if ( pTls && pTls->m_pHeadTable && pTls->m_pHeadTable->m_tStats.m_sLastMessage && pTls->m_pHeadTable->m_tStats.m_sLastMessage[0] )
+	if ( pTls && pTls->m_pHeadTable && pTls->m_pHeadTable->m_tStats.m_sLastMessage[0] )
 	{
 		const char * sMessageType = pTls->m_pHeadTable->m_tStats.m_bLastError ? "error" : "warning";
 
@@ -1413,14 +1415,6 @@ static bool myismagic ( char c )
 	return c=='@';
 }
 
-static bool myisjson ( char c )
-{
-	return
-		c=='.' ||
-		c=='[' ||
-		c==']';
-}
-
 
 bool CSphSEQuery::ParseField ( char * sField )
 {
@@ -1563,6 +1557,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 			{ "month:",	SPH_GROUPBY_MONTH },
 			{ "year:",	SPH_GROUPBY_YEAR },
 			{ "attr:",	SPH_GROUPBY_ATTR },
+			{ "multi:",     SPH_GROUPBY_MULTIPLE }
 		};
 
 		int i;
@@ -1632,7 +1627,7 @@ bool CSphSEQuery::ParseField ( char * sField )
 				break;
 
 			tFilter.m_sAttrName = sValue;
-			while ( (*sValue) && ( myisattr(*sValue) || myismagic(*sValue) || myisjson(*sValue) ) )
+			while ( (*sValue) && ( myisattr(*sValue) || myismagic(*sValue) ) )
 				sValue++;
 			if ( !*sValue )
 				break;
@@ -2345,11 +2340,10 @@ int ha_sphinx::write_row ( byte * )
 
 		} else
 		{
-                        THD *thd= ha_thd();
 			if ( (*ppField)->type()==MYSQL_TYPE_TIMESTAMP )
 			{
-                          Item_field * pWrap = new (thd->mem_root) Item_field(thd, *ppField); // autofreed by query arena, I assume
-                          Item_func_unix_timestamp * pConv = new (thd->mem_root) Item_func_unix_timestamp(thd, pWrap);
+				Item_field * pWrap = new Item_field ( *ppField ); // autofreed by query arena, I assume
+				Item_func_unix_timestamp * pConv = new Item_func_unix_timestamp ( pWrap );
 				pConv->quick_fix_field();
 				unsigned int uTs = (unsigned int) pConv->val_int();
 

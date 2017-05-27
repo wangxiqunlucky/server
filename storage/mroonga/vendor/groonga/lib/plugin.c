@@ -66,16 +66,6 @@ static grn_critical_section grn_plugins_lock;
 
 #define GRN_PLUGIN_KEY_SIZE(filename) (strlen((filename)) + 1)
 
-static char grn_plugins_dir[GRN_ENV_BUFFER_SIZE];
-
-void
-grn_plugin_init_from_env(void)
-{
-  grn_getenv("GRN_PLUGINS_DIR",
-             grn_plugins_dir,
-             GRN_ENV_BUFFER_SIZE);
-}
-
 static int
 compute_name_size(const char *name, int name_size)
 {
@@ -523,8 +513,13 @@ grn_plugin_get_default_system_plugins_dir(void)
 const char *
 grn_plugin_get_system_plugins_dir(void)
 {
-  if (grn_plugins_dir[0]) {
-    return grn_plugins_dir;
+  static char plugins_dir[GRN_ENV_BUFFER_SIZE];
+
+  grn_getenv("GRN_PLUGINS_DIR",
+             plugins_dir,
+             GRN_ENV_BUFFER_SIZE);
+  if (plugins_dir[0]) {
+    return plugins_dir;
   } else {
     return grn_plugin_get_default_system_plugins_dir();
   }

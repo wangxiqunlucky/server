@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "ma_fulltext.h"
 #include "ma_rt_index.h"
@@ -26,12 +26,14 @@ int maria_update(register MARIA_HA *info, const uchar *oldrec, uchar *newrec)
   int flag,key_changed,save_errno;
   reg3 my_off_t pos;
   uint i;
-  uchar old_key_buff[MARIA_MAX_KEY_BUFF], *UNINIT_VAR(new_key_buff);
+  uchar old_key_buff[MARIA_MAX_KEY_BUFF],*new_key_buff;
   my_bool auto_key_changed= 0;
-  ulonglong UNINIT_VAR(changed);
+  ulonglong changed;
   MARIA_SHARE *share= info->s;
   MARIA_KEYDEF *keyinfo;
   DBUG_ENTER("maria_update");
+  LINT_INIT(new_key_buff);
+  LINT_INIT(changed);
 
   DBUG_EXECUTE_IF("maria_pretend_crashed_table_on_usage",
                   maria_print_error(info->s, HA_ERR_CRASHED);

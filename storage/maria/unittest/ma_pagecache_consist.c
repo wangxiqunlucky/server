@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   TODO: use pthread_join instead of wait_for_thread_count_to_be_zero, like in
@@ -75,6 +75,30 @@ static uint flush_divider= 1000;
 #endif /*TEST_WRITERS*/
 #endif /*TEST_READERS*/
 #endif /*TEST_HIGH_CONCURENCY*/
+
+
+/**
+  @brief Dummy pagecache callback.
+*/
+
+static my_bool
+dummy_callback(uchar *page __attribute__((unused)),
+               pgcache_page_no_t page_no __attribute__((unused)),
+               uchar* data_ptr __attribute__((unused)))
+{
+  return 0;
+}
+
+
+/**
+  @brief Dummy pagecache callback.
+*/
+
+static void
+dummy_fail_callback(uchar* data_ptr __attribute__((unused)))
+{
+  return;
+}
 
 
 /*
@@ -368,8 +392,8 @@ int main(int argc __attribute__((unused)),
 	    errno);
     exit(1);
   }
-
-  pagecache_file_set_null_hooks(&file1);
+  pagecache_file_init(file1, &dummy_callback, &dummy_callback,
+                      &dummy_fail_callback, &dummy_callback, NULL);
   DBUG_PRINT("info", ("file1: %d", file1.file));
   if (my_chmod(file1_name, 0777, MYF(MY_WME)))
     exit(1);

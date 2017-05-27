@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2000, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2013, 2016, MariaDB Corporation.
+Copyright (c) 2013, 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -57,24 +57,6 @@ typedef struct st_innobase_share {
 /** Prebuilt structures in an InnoDB table handle used within MySQL */
 struct row_prebuilt_t;
 
-/** Engine specific table options are defined using this struct */
-struct ha_table_option_struct
-{
-	bool		page_compressed;	/*!< Table is using page compression
-						if this option is true. */
-	ulonglong	page_compression_level;	/*!< Table page compression level
-						0-9. */
-	uint		atomic_writes;		/*!< Use atomic writes for this
-						table if this options is ON or
-						in DEFAULT if
-						srv_use_atomic_writes=1.
-						Atomic writes are not used if
-						value OFF.*/
-	uint		encryption;		/*!<  DEFAULT, ON, OFF */
-	ulonglong	encryption_key_id;	/*!< encryption key id  */
-};
-
-
 /** The class defining a handle to an Innodb table */
 class ha_innobase: public handler
 {
@@ -100,8 +82,6 @@ class ha_innobase: public handler
 					or undefined */
 	uint		num_write_row;	/*!< number of write_row() calls */
 
-	ha_statistics*	ha_partition_stats; /*!< stats of the partition owner
-					handler (if there is one) */
 	uint store_key_val_for_row(uint keynr, char* buff, uint buff_len,
                                    const uchar* record);
 	inline void update_thd(THD* thd);
@@ -116,10 +96,6 @@ class ha_innobase: public handler
 	void innobase_initialize_autoinc();
 	dict_index_t* innobase_get_index(uint keynr);
 
-#ifdef WITH_WSREP
-	int wsrep_append_keys(THD *thd, bool shared,
-			      const uchar* record0, const uchar* record1);
-#endif
 	/* Init values for the class: */
  public:
 	ha_innobase(handlerton *hton, TABLE_SHARE *table_arg);
@@ -200,15 +176,11 @@ class ha_innobase: public handler
 			     char* norm_name,
 			     char* temp_path,
 			     char* remote_path);
-	const char* check_table_options(THD *thd, TABLE* table,
-		HA_CREATE_INFO*	create_info, const bool use_tablespace, const ulint file_format);
 	int create(const char *name, register TABLE *form,
 					HA_CREATE_INFO *create_info);
 	int truncate();
 	int delete_table(const char *name);
 	int rename_table(const char* from, const char* to);
-	int defragment_table(const char* name, const char* index_name,
-						bool async);
 	int check(THD* thd, HA_CHECK_OPT* check_opt);
 	char* update_table_comment(const char* comment);
 	char* get_foreign_key_create_info();
@@ -312,7 +284,6 @@ class ha_innobase: public handler
 		Alter_inplace_info*	ha_alter_info,
 		bool			commit);
 	/** @} */
-	void set_partition_owner_stats(ha_statistics *stats);
 	bool check_if_incompatible_data(HA_CREATE_INFO *info,
 					uint table_changes);
 private:
@@ -421,15 +392,6 @@ int thd_slave_thread(const MYSQL_THD thd);
 int thd_non_transactional_update(const MYSQL_THD thd);
 
 /**
-  Get high resolution timestamp for the current query start time.
-  The timestamp is not anchored to any specific point in time,
-  but can be used for comparison.
-
-  @retval timestamp in microseconds precision
-*/
-unsigned long long thd_start_utime(const MYSQL_THD thd);
-
-/**
   Get the user thread's binary logging format
   @param thd  user thread
   @return Value to be used as index into the binlog_format_names array
@@ -479,9 +441,7 @@ MY_ATTRIBUTE((nonnull));
  */
 extern void mysql_bin_log_commit_pos(THD *thd, ulonglong *out_pos, const char **out_file);
 
-#ifdef WITH_WSREP
-#include <mysql/service_wsrep.h>
-#endif
+struct trx_t;
 
 extern const struct _ft_vft ft_vft_result;
 
@@ -516,12 +476,9 @@ innobase_index_name_is_reserved(
 	const KEY*	key_info,	/*!< in: Indexes to be created */
 	ulint		num_of_keys)	/*!< in: Number of indexes to
 					be created. */
-	MY_ATTRIBUTE((nonnull, warn_unused_result));
+	MY_ATTRIBUTE((nonnull(1), warn_unused_result));
 
 /*****************************************************************//**
-#ifdef WITH_WSREP
-extern "C" int wsrep_trx_is_aborting(void *thd_ptr);
-#endif
 Determines InnoDB table flags.
 @retval true if successful, false if error */
 UNIV_INTERN

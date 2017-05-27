@@ -71,6 +71,7 @@ initialize_performance_schema(PFS_global_param *param)
   }
 
   init_timers();
+  PFS_atomic::init();
 
   init_event_name_sizing(param);
   register_global_classes();
@@ -186,6 +187,7 @@ static void cleanup_performance_schema(void)
   cleanup_account_hash();
   cleanup_digest();
   cleanup_digest_hash();
+  PFS_atomic::cleanup();
 }
 
 void shutdown_performance_schema(void)

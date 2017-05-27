@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Write a row to a MARIA table */
 
@@ -392,12 +392,8 @@ err:
   else
     fatal_error= 1;
 
-  if (filepos != HA_OFFSET_ERROR)
-  {
-    if ((*share->write_record_abort)(info))
-      fatal_error= 1;
-  }
-
+  if ((*share->write_record_abort)(info))
+    fatal_error= 1;
   if (fatal_error)
   {
     maria_print_error(info->s, HA_ERR_CRASHED);
@@ -974,10 +970,9 @@ int _ma_split_page(MARIA_HA *info, MARIA_KEY *key, MARIA_PAGE *split_page,
                    int move_length,
                    uchar *key_buff, my_bool insert_last_key)
 {
-  uint keynr;
   uint length,a_length,key_ref_length,t_length,nod_flag,key_length;
   uint page_length, split_length, page_flag;
-  uchar *key_pos, *pos, *UNINIT_VAR(after_key);
+  uchar *key_pos,*pos, *after_key;
   MARIA_KEY_PARAM s_temp;
   MARIA_PINNED_PAGE tmp_page_link, *page_link= &tmp_page_link;
   MARIA_SHARE *share= info->s;
@@ -987,6 +982,7 @@ int _ma_split_page(MARIA_HA *info, MARIA_KEY *key, MARIA_PAGE *split_page,
   int res;
   DBUG_ENTER("_ma_split_page");
 
+  LINT_INIT(after_key);
   DBUG_DUMP("buff", split_page->buff, split_page->size);
 
   info->page_changed=1;			/* Info->buff is used */
@@ -1049,8 +1045,10 @@ int _ma_split_page(MARIA_HA *info, MARIA_KEY *key, MARIA_PAGE *split_page,
   page_store_info(share, &new_page);
 
   /* Copy key number */
-  keynr= _ma_get_keynr(share, split_page->buff);
-  _ma_store_keynr(share, new_page.buff, keynr);
+  new_page.buff[share->keypage_header - KEYPAGE_USED_SIZE -
+                KEYPAGE_KEYID_SIZE - KEYPAGE_FLAG_SIZE]=
+    split_page->buff[share->keypage_header - KEYPAGE_USED_SIZE -
+                     KEYPAGE_KEYID_SIZE - KEYPAGE_FLAG_SIZE];
 
   res= 2;                                       /* Middle key up */
   if (share->now_transactional && _ma_log_new(&new_page, 0))
@@ -1319,7 +1317,7 @@ static int _ma_balance_page(MARIA_HA *info, MARIA_KEYDEF *keyinfo,
       pos= right_page->buff + share->keypage_header + length;
       memcpy(father_key_pos, pos, (size_t) k_length);
       bmove(right_page->buff + share->keypage_header,
-            pos + k_length, new_right_length - share->keypage_header);
+            pos + k_length, new_right_length);
 
       if (share->now_transactional)
       {
@@ -1496,7 +1494,8 @@ static int _ma_balance_page(MARIA_HA *info, MARIA_KEYDEF *keyinfo,
   page_store_info(share, &extra_page);
 
   /* Copy key number */
-  _ma_store_keynr(share, extra_buff, keyinfo->key_nr);
+  extra_buff[share->keypage_header - KEYPAGE_USED_SIZE - KEYPAGE_KEYID_SIZE -
+             KEYPAGE_FLAG_SIZE]= keyinfo->key_nr;
 
   /* move first largest keys to new page  */
   pos= right_page->buff + right_length-extra_length;
@@ -2052,7 +2051,7 @@ static my_bool _ma_log_split(MARIA_PAGE *ma_page,
 
   /* Store keypage_flag */
   *log_pos++= KEY_OP_SET_PAGEFLAG;
-  *log_pos++= _ma_get_keypage_flag(info->s, ma_page->buff);
+  *log_pos++= ma_page->buff[KEYPAGE_TRANSFLAG_OFFSET];
 
   if (new_length <= offset || !key_pos)
   {
@@ -2219,7 +2218,7 @@ static my_bool _ma_log_del_prefix(MARIA_PAGE *ma_page,
 
   /* Store keypage_flag */
   *log_pos++= KEY_OP_SET_PAGEFLAG;
-  *log_pos++= _ma_get_keypage_flag(info->s, ma_page->buff);
+  *log_pos++= ma_page->buff[KEYPAGE_TRANSFLAG_OFFSET];
 
   if (offset < diff_length + info->s->keypage_header)
   {
@@ -2343,7 +2342,7 @@ static my_bool _ma_log_key_middle(MARIA_PAGE *ma_page,
 
   /* Store keypage_flag */
   *log_pos++= KEY_OP_SET_PAGEFLAG;
-  *log_pos++= _ma_get_keypage_flag(info->s, ma_page->buff);
+  *log_pos++= ma_page->buff[KEYPAGE_TRANSFLAG_OFFSET];
 
   log_pos[0]= KEY_OP_DEL_SUFFIX;
   int2store(log_pos+1, data_deleted_last);

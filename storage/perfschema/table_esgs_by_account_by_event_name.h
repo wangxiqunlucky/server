@@ -108,6 +108,8 @@ protected:
 private:
   /** Table share lock. */
   static THR_LOCK m_table_lock;
+  /** Fields definition. */
+  static TABLE_FIELD_DEF m_field_def;
 
   /** Current row. */
   row_esgs_by_account_by_event_name m_row;

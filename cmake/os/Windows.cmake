@@ -20,6 +20,7 @@ INCLUDE (CheckCXXSourceCompiles)
 INCLUDE (CheckStructHasMember)
 INCLUDE (CheckLibraryExists)
 INCLUDE (CheckFunctionExists)
+INCLUDE (CheckCCompilerFlag)
 INCLUDE (CheckCSourceRuns)
 INCLUDE (CheckSymbolExists)
 INCLUDE (CheckTypeSize)
@@ -50,7 +51,7 @@ IF(CMAKE_C_COMPILER MATCHES "icl")
 ENDIF()
 
 ADD_DEFINITIONS(-D_WINDOWS -D__WIN__ -D_CRT_SECURE_NO_DEPRECATE)
-ADD_DEFINITIONS(-D_WIN32_WINNT=0x0600)
+ADD_DEFINITIONS(-D_WIN32_WINNT=0x0501)
 # We do not want the windows.h macros min/max
 ADD_DEFINITIONS(-DNOMINMAX)
 # Speed up build process excluding unused header files

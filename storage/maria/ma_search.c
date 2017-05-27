@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* key handling functions */
 
@@ -269,7 +269,7 @@ int _ma_bin_search(const MARIA_KEY *key, const MARIA_PAGE *ma_page,
                    uint32 comp_flag, uchar **ret_pos,
                    uchar *buff __attribute__((unused)), my_bool *last_key)
 {
-  int UNINIT_VAR(flag);
+  int flag;
   uint page_flag;
   uint start, mid, end, save_end, totlength, nod_flag;
   uint not_used[2];
@@ -277,6 +277,8 @@ int _ma_bin_search(const MARIA_KEY *key, const MARIA_PAGE *ma_page,
   MARIA_SHARE *share=  keyinfo->share;
   uchar *page;
   DBUG_ENTER("_ma_bin_search");
+
+  LINT_INIT(flag);
 
   page_flag= ma_page->flag;
   if (page_flag & KEYPAGE_FLAG_HAS_TRANSID)

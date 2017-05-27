@@ -233,7 +233,7 @@ namespace mrn {
     bool *succeeded = static_cast<bool *>(user_data);
     if (grn_db_recover(ctx_, db) != GRN_SUCCESS) {
       push_warning_printf(thd_,
-                          MRN_SEVERITY_WARNING,
+                          Sql_condition::WARN_LEVEL_WARN,
                           ER_NOT_KEYFILE,
                           "mroonga: repair: "
                           "Failed to recover database: <%s>: <%s>",

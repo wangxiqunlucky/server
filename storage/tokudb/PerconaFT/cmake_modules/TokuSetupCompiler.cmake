@@ -47,11 +47,43 @@ include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 
 ## adds a compiler flag if the compiler supports it
+macro(set_cflags_if_supported_named flag flagname)
+  check_c_compiler_flag("${flag}" HAVE_C_${flagname})
+  if (HAVE_C_${flagname})
+    set(CMAKE_C_FLAGS "${flag} ${CMAKE_C_FLAGS}")
+  endif ()
+  check_cxx_compiler_flag("${flag}" HAVE_CXX_${flagname})
+  if (HAVE_CXX_${flagname})
+    set(CMAKE_CXX_FLAGS "${flag} ${CMAKE_CXX_FLAGS}")
+  endif ()
+endmacro(set_cflags_if_supported_named)
+
+## adds a compiler flag if the compiler supports it
 macro(set_cflags_if_supported)
   foreach(flag ${ARGN})
-    MY_CHECK_AND_SET_COMPILER_FLAG(${flag})
+    STRING(REGEX REPLACE "[-,= ]" "_" res ${flag})
+    check_c_compiler_flag(${flag} HAVE_C_${res})
+    if (HAVE_C_${res})
+      set(CMAKE_C_FLAGS "${flag} ${CMAKE_C_FLAGS}")
+    endif ()
+    check_cxx_compiler_flag(${flag} HAVE_CXX_${res})
+    if (HAVE_CXX_${res})
+      set(CMAKE_CXX_FLAGS "${flag} ${CMAKE_CXX_FLAGS}")
+    endif ()
   endforeach(flag)
 endmacro(set_cflags_if_supported)
+
+## adds a linker flag if the compiler supports it
+macro(set_ldflags_if_supported)
+  foreach(flag ${ARGN})
+    STRING(REGEX REPLACE "[-,= ]" "_" res ${flag})
+    check_cxx_compiler_flag(${flag} HAVE_${res})
+    if (HAVE_${res})
+      set(CMAKE_EXE_LINKER_FLAGS "${flag} ${CMAKE_EXE_LINKER_FLAGS}")
+      set(CMAKE_SHARED_LINKER_FLAGS "${flag} ${CMAKE_SHARED_LINKER_FLAGS}")
+    endif ()
+  endforeach(flag)
+endmacro(set_ldflags_if_supported)
 
 ## disable some warnings
 set_cflags_if_supported(
@@ -98,6 +130,9 @@ endif ()
 ## this hits with optimized builds somewhere in ftleaf_split, we don't
 ## know why but we don't think it's a big deal
 set_cflags_if_supported(
+  -Wno-error=strict-overflow
+  )
+set_ldflags_if_supported(
   -Wno-error=strict-overflow
   )
 
@@ -161,9 +196,9 @@ if (NOT CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   set_cflags_if_supported(-Wcast-align)
 endif ()
 
-## always want these in debug builds
-set(CMAKE_C_FLAGS_DEBUG "-Wall -Werror ${CMAKE_C_FLAGS_DEBUG}")
-set(CMAKE_CXX_FLAGS_DEBUG "-Wall -Werror ${CMAKE_CXX_FLAGS_DEBUG}")
+## always want these
+set(CMAKE_C_FLAGS "-Wall -Werror ${CMAKE_C_FLAGS}")
+set(CMAKE_CXX_FLAGS "-Wall -Werror ${CMAKE_CXX_FLAGS}")
 
 # pick language dialect
 set(CMAKE_C_FLAGS "-std=c99 ${CMAKE_C_FLAGS}")

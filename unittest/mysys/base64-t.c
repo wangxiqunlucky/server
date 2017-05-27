@@ -16,6 +16,7 @@
 
 #include <my_global.h>
 #include <my_sys.h>
+#include <base64.h>
 #include <tap.h>
 #include <string.h>
 

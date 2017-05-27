@@ -15,10 +15,6 @@
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#ifdef GRN_EMBEDDED
-#  define GRN_PLUGIN_FUNCTION_TAG tokenizers_kytea
-#endif
-
 #include <groonga/tokenizer.h>
 
 #include <kytea/kytea.h>

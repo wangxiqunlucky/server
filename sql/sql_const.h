@@ -69,6 +69,7 @@
 #define RAND_TABLE_BIT	(((table_map) 1) << (sizeof(table_map)*8-1))
 #define PSEUDO_TABLE_BITS (PARAM_TABLE_BIT | OUTER_REF_TABLE_BIT | \
                            RAND_TABLE_BIT)
+#define CONNECT_STRING_MAXLEN   65535           /* stored in 2 bytes in .frm */
 #define MAX_FIELDS	4096			/* Limit in the .frm file */
 #define MAX_PARTITIONS  8192
 
@@ -113,7 +114,7 @@
 #define MAX_FIELDS_BEFORE_HASH	32
 #define USER_VARS_HASH_SIZE     16
 #define TABLE_OPEN_CACHE_MIN    400
-#define TABLE_OPEN_CACHE_DEFAULT 2000
+#define TABLE_OPEN_CACHE_DEFAULT 400
 #define TABLE_DEF_CACHE_DEFAULT 400
 /**
   We must have room for at least 400 table definitions in the table
@@ -150,9 +151,9 @@
 #define MYSQLD_NET_RETRY_COUNT  10	///< Abort read after this many int.
 #endif
 
-#define QUERY_ALLOC_BLOCK_SIZE		16384
-#define QUERY_ALLOC_PREALLOC_SIZE   	24576
-#define TRANS_ALLOC_BLOCK_SIZE		8192
+#define QUERY_ALLOC_BLOCK_SIZE		8192
+#define QUERY_ALLOC_PREALLOC_SIZE   	8192
+#define TRANS_ALLOC_BLOCK_SIZE		4096
 #define TRANS_ALLOC_PREALLOC_SIZE	4096
 #define RANGE_ALLOC_BLOCK_SIZE		4096
 #define ACL_ALLOC_BLOCK_SIZE		1024

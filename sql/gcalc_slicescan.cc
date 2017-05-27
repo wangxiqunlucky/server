@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include <my_global.h>
@@ -1961,7 +1961,7 @@ double Gcalc_scan_iterator::get_h() const
     state.pi->calc_xy(&x, &next_y);
   }
   else
-    next_y= state.pi->next ? state.pi->get_next()->node.shape.y : 0.0;
+    next_y= state.pi->node.shape.y;
   return next_y - cur_y;
 }
 
@@ -1974,7 +1974,7 @@ double Gcalc_scan_iterator::get_sp_x(const point *sp) const
   dy= sp->next_pi->node.shape.y - sp->pi->node.shape.y;
   if (fabs(dy) < 1e-12)
     return sp->pi->node.shape.x;
-  return sp->pi->node.shape.x + (sp->next_pi->node.shape.x - sp->pi->node.shape.x) * dy;
+  return (sp->next_pi->node.shape.x - sp->pi->node.shape.x) * dy;
 }
 
 

@@ -125,7 +125,7 @@ foreach my $option (@ARGV)
     foreach my $p (@plugins)
     {
       $p =~ s/-/_/g;
-      $cmakeargs = $cmakeargs." -DWITH_".uc($p)."=AUTO";
+      $cmakeargs = $cmakeargs." -DWITH_".uc($p)."=1";
     }
     next;
   }
@@ -135,14 +135,9 @@ foreach my $option (@ARGV)
     $cmakeargs = $cmakeargs." -DWITH_EXTRA_CHARSETS=".$charsets;
     next;
   }
-  if($option =~ /without-plugin=/ || $option =~ /without-plugin-/)
+  if($option =~ /without-plugin=/)
   {
-    $cmakeargs = $cmakeargs." -DPLUGIN_".uc(substr($option,15))."=NO";
-    next;
-  }
-  if($option =~ /with-plugin-(.*)=(.*)/)
-  {
-    $cmakeargs = $cmakeargs." -DPLUGIN_".uc($1)."=".uc($2);
+    $cmakeargs = $cmakeargs." -DWITHOUT_".uc(substr($option,15))."=1";
     next;
   }
   if($option =~ /with-zlib-dir=bundled/)
@@ -172,7 +167,7 @@ foreach my $option (@ARGV)
   }
   if($option =~ /with-debug/)
   {
-    $cmakeargs = $cmakeargs." -DCMAKE_BUILD_TYPE=Debug -DSECURITY_HARDENED=OFF";
+    $cmakeargs = $cmakeargs." -DCMAKE_BUILD_TYPE=Debug";
     next;
   }
   if($option =~ /with-ssl/)
@@ -236,11 +231,6 @@ foreach my $option (@ARGV)
   {
       $cmakeargs = $cmakeargs." -DENABLE_GCOV=ON"; 
       next;
-  }
-  if ($option =~ /with-max-indexes=/)
-  {
-    $cmakeargs = $cmakeargs." -DMAX_INDEXES=".substr($option, 17); 
-    next;
   }
   if ($option =~ /verbose/)
   {

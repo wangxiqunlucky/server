@@ -31,7 +31,6 @@ Created 11/29/1995 Heikki Tuuri
 
 #include "buf0buf.h"
 #include "fil0fil.h"
-#include "fil0crypt.h"
 #include "mtr0log.h"
 #include "ut0byte.h"
 #include "page0page.h"
@@ -663,7 +662,6 @@ fsp_header_init_fields(
 	ulint	space_id,	/*!< in: space id */
 	ulint	flags)		/*!< in: tablespace flags (FSP_SPACE_FLAGS) */
 {
-	flags &= ~FSP_FLAGS_MEM_MASK;
 	ut_a(fsp_flags_is_valid(flags));
 
 	mach_write_to_4(FSP_HEADER_OFFSET + FSP_SPACE_ID + page,
@@ -680,7 +678,7 @@ UNIV_INTERN
 void
 fsp_header_init(
 /*============*/
-	ulint	space_id,	/*!< in: space id */
+	ulint	space,		/*!< in: space id */
 	ulint	size,		/*!< in: current size in blocks */
 	mtr_t*	mtr)		/*!< in/out: mini-transaction */
 {
@@ -692,11 +690,11 @@ fsp_header_init(
 
 	ut_ad(mtr);
 
-	mtr_x_lock(fil_space_get_latch(space_id, &flags), mtr);
+	mtr_x_lock(fil_space_get_latch(space, &flags), mtr);
 
 	zip_size = fsp_flags_get_zip_size(flags);
-	block = buf_page_create(space_id, 0, zip_size, mtr);
-	buf_page_get(space_id, zip_size, 0, RW_X_LATCH, mtr);
+	block = buf_page_create(space, 0, zip_size, mtr);
+	buf_page_get(space, zip_size, 0, RW_X_LATCH, mtr);
 	buf_block_dbg_add_level(block, SYNC_FSP_PAGE);
 
 	/* The prior contents of the file page should be ignored */
@@ -709,12 +707,12 @@ fsp_header_init(
 
 	header = FSP_HEADER_OFFSET + page;
 
-	mlog_write_ulint(header + FSP_SPACE_ID, space_id, MLOG_4BYTES, mtr);
+	mlog_write_ulint(header + FSP_SPACE_ID, space, MLOG_4BYTES, mtr);
 	mlog_write_ulint(header + FSP_NOT_USED, 0, MLOG_4BYTES, mtr);
 
 	mlog_write_ulint(header + FSP_SIZE, size, MLOG_4BYTES, mtr);
 	mlog_write_ulint(header + FSP_FREE_LIMIT, 0, MLOG_4BYTES, mtr);
-	mlog_write_ulint(header + FSP_SPACE_FLAGS, flags & ~FSP_FLAGS_MEM_MASK,
+	mlog_write_ulint(header + FSP_SPACE_FLAGS, flags,
 			 MLOG_4BYTES, mtr);
 	mlog_write_ulint(header + FSP_FRAG_N_USED, 0, MLOG_4BYTES, mtr);
 
@@ -725,25 +723,15 @@ fsp_header_init(
 	flst_init(header + FSP_SEG_INODES_FREE, mtr);
 
 	mlog_write_ull(header + FSP_SEG_ID, 1, mtr);
-	if (space_id == 0) {
-		fsp_fill_free_list(FALSE, space_id, header, mtr);
+	if (space == 0) {
+		fsp_fill_free_list(FALSE, space, header, mtr);
 		btr_create(DICT_CLUSTERED | DICT_UNIVERSAL | DICT_IBUF,
-			   0, 0, DICT_IBUF_ID_MIN + space_id,
+			   0, 0, DICT_IBUF_ID_MIN + space,
 			   dict_ind_redundant, mtr);
 	} else {
-		fsp_fill_free_list(TRUE, space_id, header, mtr);
+		fsp_fill_free_list(TRUE, space, header, mtr);
 	}
-
-	fil_space_t* space = fil_space_acquire(space_id);
-	ut_ad(space);
-
-	if (space->crypt_data) {
-		space->crypt_data->write_page0(page, mtr);
-	}
-
-	fil_space_release(space);
 }
-
 #endif /* !UNIV_HOTBACKUP */
 
 /**********************************************************************//**
@@ -4151,54 +4139,3 @@ fsp_print(
 	fprintf(stderr, "NUMBER of file segments: %lu\n", (ulong) n_segs);
 }
 #endif /* !UNIV_HOTBACKUP */
-
-/**********************************************************************//**
-Compute offset after xdes where crypt data can be stored
-@param[in]	zip_size	Compressed size or 0
-@return	offset */
-ulint
-fsp_header_get_crypt_offset(
-	const ulint   zip_size)
-{
-	ulint pageno = 0;
-	/* compute first page_no that will have xdes stored on page != 0*/
-	for (ulint i = 0;
-	     (pageno = xdes_calc_descriptor_page(zip_size, i)) == 0; )
-		i++;
-
-	/* use pageno prior to this...i.e last page on page 0 */
-	ut_ad(pageno > 0);
-	pageno--;
-
-	ulint iv_offset = XDES_ARR_OFFSET +
-		XDES_SIZE * (1 + xdes_calc_descriptor_index(zip_size, pageno));
-
-	return FSP_HEADER_OFFSET + iv_offset;
-}
-
-/**********************************************************************//**
-Checks if a single page is free.
-@return	true if free */
-UNIV_INTERN
-bool
-fsp_page_is_free_func(
-/*==============*/
-	ulint		space,		/*!< in: space id */
-	ulint		page_no,	/*!< in: page offset */
-	mtr_t*		mtr,		/*!< in/out: mini-transaction */
-	const char *file,
-	ulint line)
-{
-	ulint		flags;
-
-	ut_ad(mtr);
-
-	mtr_x_lock_func(fil_space_get_latch(space, &flags), file, line, mtr);
-	ulint zip_size = fsp_flags_get_zip_size(flags);
-
-	xdes_t* descr = xdes_get_descriptor(space, zip_size, page_no, mtr);
-	ut_a(descr);
-
-	return xdes_mtr_get_bit(
-		descr, XDES_FREE_BIT, page_no % FSP_EXTENT_SIZE, mtr);
-}

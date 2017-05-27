@@ -108,7 +108,6 @@ LEX_CUSTRING build_frm_image(THD *thd, const char *table,
   ulong key_buff_length;
   ulong filepos, data_offset;
   uint options_len;
-  uint gis_extra2_len= 0;
   uchar fileinfo[FRM_HEADER_SIZE],forminfo[FRM_FORMINFO_SIZE];
   const partition_info *part_info= IF_PARTITIONING(thd->work_part_info, 0);
   int error;
@@ -154,9 +153,6 @@ LEX_CUSTRING build_frm_image(THD *thd, const char *table,
   options_len= engine_table_options_frm_length(create_info->option_list,
                                                create_fields,
                                                keys, key_info);
-#ifdef HAVE_SPATIAL
-  gis_extra2_len= gis_field_options_image(NULL, create_fields);
-#endif /*HAVE_SPATIAL*/
   DBUG_PRINT("info", ("Options length: %u", options_len));
 
   if (validate_comment_length(thd, &create_info->comment, TABLE_COMMENT_MAXLEN,
@@ -201,10 +197,6 @@ LEX_CUSTRING build_frm_image(THD *thd, const char *table,
   if (part_info)
     extra2_size+= 1 + 1 + hton_name(part_info->default_engine_type)->length;
 
-  if (gis_extra2_len)
-    extra2_size+= 1 + (gis_extra2_len > 255 ? 3 : 1) + gis_extra2_len;
-
-
   key_buff_length= uint4korr(fileinfo+47);
 
   frm.length= FRM_HEADER_SIZE;                  // fileinfo;
@@ -225,7 +217,7 @@ LEX_CUSTRING build_frm_image(THD *thd, const char *table,
     my_error(ER_TABLE_DEFINITION_TOO_BIG, MYF(0), table);
     DBUG_RETURN(frm);
   }
-
+  
   frm_ptr= (uchar*) my_malloc(frm.length, MYF(MY_WME | MY_ZEROFILL |
                                               MY_THREAD_SPECIFIC));
   if (!frm_ptr)
@@ -248,15 +240,6 @@ LEX_CUSTRING build_frm_image(THD *thd, const char *table,
     pos= engine_table_options_frm_image(pos, create_info->option_list,
                                         create_fields, keys, key_info);
   }
-
-#ifdef HAVE_SPATIAL
-  if (gis_extra2_len)
-  {
-    *pos= EXTRA2_GIS;
-    pos= extra2_write_len(pos+1, gis_extra2_len);
-    pos+= gis_field_options_image(pos, create_fields);
-  }
-#endif /*HAVE_SPATIAL*/
 
   int4store(pos, filepos); // end of the extra2 segment
   pos+= 4;
@@ -377,7 +360,8 @@ int rea_create_table(THD *thd, LEX_CUSTRING *frm,
 {
   DBUG_ENTER("rea_create_table");
 
-  if (no_ha_create_table)
+  // TODO don't write frm for temp tables
+  if (no_ha_create_table || create_info->tmp_table())
   {
     if (writefrm(path, db, table_name, true, frm->str, frm->length))
       goto err_frm;
@@ -501,7 +485,7 @@ static bool pack_header(THD *thd, uchar *forminfo,
 
   if (create_fields.elements > MAX_FIELDS)
   {
-    my_message(ER_TOO_MANY_FIELDS, ER_THD(thd, ER_TOO_MANY_FIELDS), MYF(0));
+    my_message(ER_TOO_MANY_FIELDS, ER(ER_TOO_MANY_FIELDS), MYF(0));
     DBUG_RETURN(1);
   }
 
@@ -583,14 +567,14 @@ static bool pack_header(THD *thd, uchar *forminfo,
           The HEX representation is created from this copy.
         */
         field->save_interval= field->interval;
-        field->interval= (TYPELIB*) thd->alloc(sizeof(TYPELIB));
+        field->interval= (TYPELIB*) sql_alloc(sizeof(TYPELIB));
         *field->interval= *field->save_interval; 
         field->interval->type_names= 
-          (const char **) thd->alloc(sizeof(char*) * 
-                                     (field->interval->count+1));
+          (const char **) sql_alloc(sizeof(char*) * 
+				    (field->interval->count+1));
         field->interval->type_names[field->interval->count]= 0;
         field->interval->type_lengths=
-          (uint *) thd->alloc(sizeof(uint) * field->interval->count);
+          (uint *) sql_alloc(sizeof(uint) * field->interval->count);
  
         for (uint pos= 0; pos < field->interval->count; pos++)
         {
@@ -600,8 +584,8 @@ static bool pack_header(THD *thd, uchar *forminfo,
           length= field->save_interval->type_lengths[pos];
           hex_length= length * 2;
           field->interval->type_lengths[pos]= hex_length;
-          field->interval->type_names[pos]= dst=
-            (char*) thd->alloc(hex_length + 1);
+          field->interval->type_names[pos]= dst= (char*) sql_alloc(hex_length +
+                                                                   1);
           octet2hex(dst, src, length);
         }
       }
@@ -631,7 +615,7 @@ static bool pack_header(THD *thd, uchar *forminfo,
       n_length+int_length+com_length+vcol_info_length > 65535L || 
       int_count > 255)
   {
-    my_message(ER_TOO_MANY_FIELDS, ER_THD(thd, ER_TOO_MANY_FIELDS), MYF(0));
+    my_message(ER_TOO_MANY_FIELDS, ER(ER_TOO_MANY_FIELDS), MYF(0));
     DBUG_RETURN(1);
   }
 
@@ -825,11 +809,9 @@ static bool pack_fields(uchar *buff, List<Create_field> &create_fields,
             }
           }
 
-          if (!sep)
+          if(!sep)    /* disaster, enum uses all characters, none left as separator */
           {
-            /* disaster, enum uses all characters, none left as separator */
-            my_message(ER_WRONG_FIELD_TERMINATORS,
-                       ER(ER_WRONG_FIELD_TERMINATORS),
+            my_message(ER_WRONG_FIELD_TERMINATORS,ER(ER_WRONG_FIELD_TERMINATORS),
                        MYF(0));
             DBUG_RETURN(1);
           }
@@ -924,7 +906,7 @@ static bool make_empty_rec(THD *thd, uchar *buff, uint table_options,
     /*
       regfield don't have to be deleted as it's allocated with sql_alloc()
     */
-    Field *regfield= make_field(&share, thd->mem_root,
+    Field *regfield= make_field(&share,
                                 buff+field->offset + data_offset,
                                 field->length,
                                 null_pos + null_count / 8,
@@ -932,7 +914,7 @@ static bool make_empty_rec(THD *thd, uchar *buff, uint table_options,
                                 field->pack_flag,
                                 field->sql_type,
                                 field->charset,
-                                field->geom_type, field->srid,
+                                field->geom_type,
                                 field->unireg_check,
                                 field->save_interval ? field->save_interval :
                                 field->interval, 
@@ -976,11 +958,9 @@ static bool make_empty_rec(THD *thd, uchar *buff, uint table_options,
       regfield->store((longlong) 1, TRUE);
     }
     else if (type == Field::YES)		// Old unireg type
-      regfield->store(ER_THD(thd, ER_YES),(uint) strlen(ER_THD(thd, ER_YES)),
-                      system_charset_info);
+      regfield->store(ER(ER_YES),(uint) strlen(ER(ER_YES)),system_charset_info);
     else if (type == Field::NO)			// Old unireg type
-      regfield->store(ER_THD(thd, ER_NO), (uint) strlen(ER_THD(thd, ER_NO)),
-                      system_charset_info);
+      regfield->store(ER(ER_NO), (uint) strlen(ER(ER_NO)),system_charset_info);
     else
       regfield->reset();
   }

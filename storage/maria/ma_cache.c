@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /*
   Functions for read record cacheing with maria
@@ -42,7 +42,6 @@ my_bool _ma_read_cache(MARIA_HA *handler, IO_CACHE *info, uchar *buff,
   my_off_t offset;
   uchar *in_buff_pos;
   DBUG_ENTER("_ma_read_cache");
-  DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
 
   if (pos < info->pos_in_file)
   {
@@ -82,7 +81,7 @@ my_bool _ma_read_cache(MARIA_HA *handler, IO_CACHE *info, uchar *buff,
     }
     else
       info->read_pos=info->read_end;			/* All block used */
-    if (!_my_b_read(info,buff,length))
+    if (!(*info->read_function)(info,buff,length))
       DBUG_RETURN(0);
     read_length=info->error;
   }

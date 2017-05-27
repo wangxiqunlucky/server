@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2014, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2016, MariaDB
+   Copyright (c) 2010, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -614,6 +614,7 @@ static my_bool sql_connect(MYSQL *mysql, uint wait)
 
 static int execute_commands(MYSQL *mysql,int argc, char **argv)
 {
+  int ret = 0;
   const char *status;
   /*
     MySQL documentation relies on the fact that mysqladmin will
@@ -716,7 +717,10 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       if (mysql_refresh(mysql,
 			(uint) ~(REFRESH_GRANT | REFRESH_STATUS |
 				 REFRESH_READ_LOCK | REFRESH_SLAVE |
-				 REFRESH_MASTER)))
+				 REFRESH_MASTER | REFRESH_TABLE_STATS |
+                                 REFRESH_INDEX_STATS |
+                                 REFRESH_USER_STATS |
+                                 REFRESH_CLIENT_STATS)))
       {
 	my_printf_error(0, "refresh failed; error: '%s'", error_flags,
 			mysql_error(mysql));
@@ -1104,7 +1108,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
         if (strcmp(typed_password, verified) != 0)
         {
           my_printf_error(0,"Passwords don't match",MYF(ME_BELL));
-          return -1;
+          ret = -1;
+          goto password_done;
         }
       }
       else
@@ -1131,7 +1136,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
           {
             my_printf_error(0, "Could not determine old_passwords setting from server; error: '%s'",
                 	    error_flags, mysql_error(mysql));
-            return -1;
+            ret = -1;
+            goto password_done;
           }
           else
           {
@@ -1142,7 +1148,8 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
                               "Could not get old_passwords setting from "
                               "server; error: '%s'",
         		      error_flags, mysql_error(mysql));
-              return -1;
+              ret = -1;
+              goto password_done;
             }
             if (!mysql_num_rows(res))
               old= 1;
@@ -1167,15 +1174,15 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       {
 	my_printf_error(0, "Can't turn off logging; error: '%s'",
 			error_flags, mysql_error(mysql));
-	return -1;
+        ret = -1;
       }
+      else
       if (mysql_query(mysql,buff))
       {
 	if (mysql_errno(mysql)!=1290)
 	{
 	  my_printf_error(0,"unable to change password; error: '%s'",
 			  error_flags, mysql_error(mysql));
-	  return -1;
 	}
 	else
 	{
@@ -1189,9 +1196,10 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
 			  " --skip-grant-tables).\n"
 			  "Use: \"mysqladmin flush-privileges password '*'\""
 			  " instead", error_flags);
-	  return -1;
 	}
+        ret = -1;
       }
+password_done:
       /* free up memory from prompted password */
       if (typed_password != argv[1]) 
       {
@@ -1293,7 +1301,7 @@ static int execute_commands(MYSQL *mysql,int argc, char **argv)
       return 1;
     }
   }
-  return 0;
+  return ret;
 }
 
 /**

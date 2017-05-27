@@ -319,12 +319,12 @@ void TDB::Printf(PGLOBAL g, FILE *f, uint n)
 
     } /* endfor tp */
 
-  } // end of Printf
+  } // end of Print
 
 void TDB::Prints(PGLOBAL, char *ps, uint)
   {
   sprintf(ps, "R%d.%s", Tdb_No, Name);
-  } // end of Prints
+  } // end of Print
 
 /* -------------------------- class TDBASE --------------------------- */
 

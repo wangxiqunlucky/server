@@ -1,6 +1,5 @@
 /*
    Copyright (c) 2000, 2011, Oracle and/or its affiliates
-   Copyright (c) 2010, 2015, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -23,6 +22,7 @@
   Possibly use of asyncronic io.
   macros for read and writes for faster io.
   Used instead of FILE when reading or writing whole files.
+  This code makes mf_rec_cache obsolete (currently only used by ISAM)
   One can change info->pos_in_file to a higher value to skip bytes in file if
   also info->read_pos is set to info->read_end.
   If called through open_cached_file(), then the temporary file will
@@ -64,16 +64,6 @@ static void my_aiowait(my_aio_result *result);
 #define IO_ROUND_UP(X) (((X)+IO_SIZE-1) & ~(IO_SIZE-1))
 #define IO_ROUND_DN(X) ( (X)            & ~(IO_SIZE-1))
 
-static int _my_b_cache_read(IO_CACHE *info, uchar *Buffer, size_t Count);
-static int _my_b_cache_read_r(IO_CACHE *info, uchar *Buffer, size_t Count);
-static int _my_b_seq_read(IO_CACHE *info, uchar *Buffer, size_t Count);
-static int _my_b_cache_write(IO_CACHE *info, const uchar *Buffer, size_t Count);
-static int _my_b_cache_write_r(IO_CACHE *info, const uchar *Buffer, size_t Count);
-
-int (*_my_b_encr_read)(IO_CACHE *info,uchar *Buffer,size_t Count)= 0;
-int (*_my_b_encr_write)(IO_CACHE *info,const uchar *Buffer,size_t Count)= 0;
-
-
 /*
   Setup internal pointers inside IO_CACHE
 
@@ -82,7 +72,7 @@ int (*_my_b_encr_write)(IO_CACHE *info,const uchar *Buffer,size_t Count)= 0;
     info		IO_CACHE handler
 
   NOTES
-    This is called on automatically on init or reinit of IO_CACHE
+    This is called on automaticly on init or reinit of IO_CACHE
     It must be called externally if one moves or copies an IO_CACHE
     object.
 */
@@ -107,8 +97,6 @@ static void
 init_functions(IO_CACHE* info)
 {
   enum cache_type type= info->type;
-  info->read_function = 0;                      /* Force a core if used */
-  info->write_function = 0;                     /* Force a core if used */
   switch (type) {
   case READ_NET:
     /*
@@ -118,35 +106,14 @@ init_functions(IO_CACHE* info)
       programs that link against mysys but know nothing about THD, such
       as myisamchk
     */
-    DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
     break;
   case SEQ_READ_APPEND:
     info->read_function = _my_b_seq_read;
-    DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
+    info->write_function = 0;			/* Force a core if used */
     break;
-  case READ_CACHE:
-    if (info->myflags & MY_ENCRYPT)
-    {
-      DBUG_ASSERT(info->share == 0);
-      info->read_function = _my_b_encr_read;
-      break;
-    }
-    /* fall through */
-  case WRITE_CACHE:
-    if (info->myflags & MY_ENCRYPT)
-    {
-      info->write_function = _my_b_encr_write;
-      break;
-    }
-    /* fall through */
-  case READ_FIFO:
-    DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
-    info->read_function = info->share ? _my_b_cache_read_r : _my_b_cache_read;
-    info->write_function = info->share ? _my_b_cache_write_r : _my_b_cache_write;
-    break;
-  case TYPE_NOT_SET:
-    DBUG_ASSERT(0);
-    break;
+  default:
+    info->read_function = info->share ? _my_b_read_r : _my_b_read;
+    info->write_function = _my_b_write;
   }
 
   setup_io_cache(info);
@@ -166,8 +133,8 @@ init_functions(IO_CACHE* info)
 			If == 0 then use my_default_record_cache_size
     type		Type of cache
     seek_offset		Where cache should start reading/writing
-    use_async_io	Set to 1 of we should use async_io (if available)
-    cache_myflags	Bitmap of different flags
+    use_async_io	Set to 1 of we should use async_io (if avaiable)
+    cache_myflags	Bitmap of differnt flags
 			MY_WME | MY_FAE | MY_NABP | MY_FNABP |
 			MY_DONT_CHECK_FILESIZE
 
@@ -178,7 +145,7 @@ init_functions(IO_CACHE* info)
 
 int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
 		  enum cache_type type, my_off_t seek_offset,
-		  my_bool use_async_io, myf cache_myflags)
+		  pbool use_async_io, myf cache_myflags)
 {
   size_t min_cache;
   my_off_t pos;
@@ -190,13 +157,14 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
   info->file= file;
   info->type= TYPE_NOT_SET;	    /* Don't set it until mutex are created */
   info->pos_in_file= seek_offset;
+  info->pre_close = info->pre_read = info->post_read = 0;
+  info->arg = 0;
   info->alloced_buffer = 0;
   info->buffer=0;
   info->seek_not_done= 0;
 
   if (file >= 0)
   {
-    DBUG_ASSERT(!(cache_myflags & MY_ENCRYPT));
     pos= mysql_file_tell(file, MYF(0));
     if ((pos == (my_off_t) -1) && (my_errno == ESPIPE))
     {
@@ -213,12 +181,6 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
     else
       info->seek_not_done= MY_TEST(seek_offset != pos);
   }
-  else
-    if (type == WRITE_CACHE && _my_b_encr_read)
-    {
-      cache_myflags|= MY_ENCRYPT;
-      DBUG_ASSERT(seek_offset == 0);
-    }
 
   info->disk_writes= 0;
   info->share=0;
@@ -228,7 +190,6 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
   min_cache=use_async_io ? IO_SIZE*4 : IO_SIZE*2;
   if (type == READ_CACHE || type == SEQ_READ_APPEND)
   {						/* Assume file isn't growing */
-    DBUG_ASSERT(!(cache_myflags & MY_ENCRYPT));
     if (!(cache_myflags & MY_DONT_CHECK_FILESIZE))
     {
       /* Calculate end of file to avoid allocating oversized buffers */
@@ -246,7 +207,7 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
     }
   }
   cache_myflags &= ~MY_DONT_CHECK_FILESIZE;
-  if (type != READ_NET)
+  if (type != READ_NET && type != WRITE_NET)
   {
     /* Retry allocating memory in smaller blocks until we get one */
     cachesize= ((cachesize + min_cache-1) & ~(min_cache-1));
@@ -264,18 +225,15 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
       buffer_block= cachesize;
       if (type == SEQ_READ_APPEND)
 	buffer_block *= 2;
-      else if (cache_myflags & MY_ENCRYPT)
-        buffer_block= 2*(buffer_block + MY_AES_BLOCK_SIZE) + sizeof(IO_CACHE_CRYPT);
       if (cachesize == min_cache)
         flags|= (myf) MY_WME;
 
       if ((info->buffer= (uchar*) my_malloc(buffer_block, flags)) != 0)
       {
+	info->write_buffer=info->buffer;
 	if (type == SEQ_READ_APPEND)
-	  info->write_buffer= info->buffer + cachesize;
-        else
-          info->write_buffer= info->buffer;
-	info->alloced_buffer= 1;
+	  info->write_buffer = info->buffer + cachesize;
+	info->alloced_buffer=1;
 	break;					/* Enough memory found */
       }
       if (cachesize == min_cache)
@@ -319,7 +277,6 @@ int init_io_cache(IO_CACHE *info, File file, size_t cachesize,
   if (use_async_io && ! my_disable_async_io)
   {
     DBUG_PRINT("info",("Using async io"));
-    DBUG_ASSERT(!(cache_myflags & MY_ENCRYPT));
     info->read_length/=2;
     info->read_function=_my_b_async_read;
   }
@@ -343,7 +300,7 @@ static void my_aiowait(my_aio_result *result)
 	if (errno == EINTR)
 	  continue;
 	DBUG_PRINT("error",("No aio request, error: %d",errno));
-	result->pending=0;			/* Assume everything is ok */
+	result->pending=0;			/* Assume everythings is ok */
 	break;
       }
       ((my_aio_result*) tmp)->pending=0;
@@ -365,16 +322,18 @@ static void my_aiowait(my_aio_result *result)
 
 my_bool reinit_io_cache(IO_CACHE *info, enum cache_type type,
 			my_off_t seek_offset,
-			my_bool use_async_io __attribute__((unused)),
-			my_bool clear_cache)
+			pbool use_async_io __attribute__((unused)),
+			pbool clear_cache)
 {
   DBUG_ENTER("reinit_io_cache");
   DBUG_PRINT("enter",("cache: 0x%lx type: %d  seek_offset: %lu  clear_cache: %d",
 		      (ulong) info, type, (ulong) seek_offset,
 		      (int) clear_cache));
 
-  DBUG_ASSERT(type == READ_CACHE || type == WRITE_CACHE);
-  DBUG_ASSERT(info->type == READ_CACHE || info->type == WRITE_CACHE);
+  /* One can't do reinit with the following types */
+  DBUG_ASSERT(type != READ_NET && info->type != READ_NET &&
+	      type != WRITE_NET && info->type != WRITE_NET &&
+	      type != SEQ_READ_APPEND && info->type != SEQ_READ_APPEND);
 
   /* If the whole file is in memory, avoid flushing to disk */
   if (! clear_cache &&
@@ -432,22 +391,8 @@ my_bool reinit_io_cache(IO_CACHE *info, enum cache_type type,
     }
     else
     {
-      if (info->myflags & MY_ENCRYPT)
-      {
-        info->write_end = info->write_buffer + info->buffer_length;
-        if (seek_offset && info->file != -1)
-        {
-          info->read_end= info->buffer;
-          _my_b_encr_read(info, 0, 0); /* prefill the buffer */
-          info->write_pos= info->read_pos;
-          info->pos_in_file+= info->buffer_length;
-        }
-      }
-      else
-      {
-        info->write_end=(info->buffer + info->buffer_length -
-                         (seek_offset & (IO_SIZE-1)));
-      }
+      info->write_end=(info->buffer + info->buffer_length -
+		       (seek_offset & (IO_SIZE-1)));
       info->end_of_file= ~(my_off_t) 0;
     }
   }
@@ -460,7 +405,6 @@ my_bool reinit_io_cache(IO_CACHE *info, enum cache_type type,
       ((ulong) info->buffer_length <
        (ulong) (info->end_of_file - seek_offset)))
   {
-    DBUG_ASSERT(!(cache_myflags & MY_ENCRYPT));
     info->read_length=info->buffer_length/2;
     info->read_function=_my_b_async_read;
   }
@@ -470,72 +414,12 @@ my_bool reinit_io_cache(IO_CACHE *info, enum cache_type type,
 } /* reinit_io_cache */
 
 
-int _my_b_read(IO_CACHE *info, uchar *Buffer, size_t Count)
-{
-  size_t left_length;
-  int res;
-
-  /* If the buffer is not empty yet, copy what is available. */
-  if ((left_length= (size_t) (info->read_end - info->read_pos)))
-  {
-    DBUG_ASSERT(Count > left_length);
-    memcpy(Buffer, info->read_pos, left_length);
-    Buffer+=left_length;
-    Count-=left_length;
-  }
-  res= info->read_function(info, Buffer, Count);
-  if (res && info->error >= 0)
-    info->error+= left_length; /* update number or read bytes */
-  return res;
-}
-
-int _my_b_write(IO_CACHE *info, const uchar *Buffer, size_t Count)
-{
-  size_t rest_length;
-  int res;
-
-  /* Always use my_b_flush_io_cache() to flush write_buffer! */
-  DBUG_ASSERT(Buffer != info->write_buffer);
-
-  if (info->pos_in_file + info->buffer_length > info->end_of_file)
-  {
-    my_errno=errno=EFBIG;
-    return info->error = -1;
-  }
-
-  rest_length= (size_t) (info->write_end - info->write_pos);
-  DBUG_ASSERT(Count >= rest_length);
-  memcpy(info->write_pos, Buffer, (size_t) rest_length);
-  Buffer+=rest_length;
-  Count-=rest_length;
-  info->write_pos+=rest_length;
-
-  if (my_b_flush_io_cache(info, 1))
-    return 1;
-
-  if (Count)
-  {
-    my_off_t old_pos_in_file= info->pos_in_file;
-    res= info->write_function(info, Buffer, Count);
-    Count-= info->pos_in_file - old_pos_in_file;
-    Buffer+= info->pos_in_file - old_pos_in_file;
-  }
-  else
-    res= 0;
-
-  if (!res && Count)
-  {
-    memcpy(info->write_pos, Buffer, Count);
-    info->write_pos+= Count;
-  }
-  return res;
-}
 
 /*
   Read buffered.
 
   SYNOPSIS
-    _my_b_cache_read()
+    _my_b_read()
       info                      IO_CACHE pointer
       Buffer                    Buffer to retrieve count bytes from file
       Count                     Number of bytes to read into Buffer
@@ -551,7 +435,7 @@ int _my_b_write(IO_CACHE *info, const uchar *Buffer, size_t Count)
     types than my_off_t unless you can be sure that their value fits.
     Same applies to differences of file offsets.
 
-    When changing this function, check _my_b_cache_read_r(). It might need the
+    When changing this function, check _my_b_read_r(). It might need the
     same change.
 
   RETURN
@@ -561,11 +445,20 @@ int _my_b_write(IO_CACHE *info, const uchar *Buffer, size_t Count)
              Otherwise info->error contains the number of bytes in Buffer.
 */
 
-int _my_b_cache_read(IO_CACHE *info, uchar *Buffer, size_t Count)
+int _my_b_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
 {
-  size_t length, diff_length, left_length= 0, max_length;
+  size_t length,diff_length,left_length, max_length;
   my_off_t pos_in_file;
-  DBUG_ENTER("_my_b_cache_read");
+  DBUG_ENTER("_my_b_read");
+
+  /* If the buffer is not empty yet, copy what is available. */
+  if ((left_length= (size_t) (info->read_end-info->read_pos)))
+  {
+    DBUG_ASSERT(Count >= left_length);	/* User is not using my_b_read() */
+    memcpy(Buffer,info->read_pos, left_length);
+    Buffer+=left_length;
+    Count-=left_length;
+  }
 
   /* pos_in_file always point on where info->buffer was read */
   pos_in_file=info->pos_in_file+ (size_t) (info->read_end - info->buffer);
@@ -622,7 +515,7 @@ int _my_b_cache_read(IO_CACHE *info, uchar *Buffer, size_t Count)
       what we did already read from a block. That way, the read will
       end aligned with a block.
     */
-    length= IO_ROUND_DN(Count) - diff_length;
+    length=(Count & (size_t) ~(IO_SIZE-1))-diff_length;
     if ((read_length= mysql_file_read(info->file,Buffer, length, info->myflags))
 	!= length)
     {
@@ -665,11 +558,7 @@ int _my_b_cache_read(IO_CACHE *info, uchar *Buffer, size_t Count)
       info->error= (int) left_length;
       DBUG_RETURN(1);
     }
-    else
-    {
-      info->error= 0;
-      DBUG_RETURN(0);                           /* EOF */
-    }
+    length=0;				/* Didn't read any chars */
   }
   else if ((length= mysql_file_read(info->file,info->buffer, max_length,
                             info->myflags)) < Count ||
@@ -796,15 +685,12 @@ void init_io_cache_share(IO_CACHE *read_cache, IO_CACHE_SHARE *cshare,
   cshare->source_cache=    write_cache; /* Can be NULL. */
 
   read_cache->share=         cshare;
-  read_cache->read_function= _my_b_cache_read_r;
+  read_cache->read_function= _my_b_read_r;
   read_cache->current_pos=   NULL;
   read_cache->current_end=   NULL;
 
   if (write_cache)
-  {
     write_cache->share= cshare;
-    write_cache->write_function= _my_b_cache_write_r;
-  }
 
   DBUG_VOID_RETURN;
 }
@@ -1072,7 +958,7 @@ static void unlock_io_cache(IO_CACHE *cache)
   Read from IO_CACHE when it is shared between several threads.
 
   SYNOPSIS
-    _my_b_cache_read_r()
+    _my_b_read_r()
       cache                     IO_CACHE pointer
       Buffer                    Buffer to retrieve count bytes from file
       Count                     Number of bytes to read into Buffer
@@ -1097,7 +983,7 @@ static void unlock_io_cache(IO_CACHE *cache)
     types than my_off_t unless you can be sure that their value fits.
     Same applies to differences of file offsets. (Bug #11527)
 
-    When changing this function, check _my_b_cache_read(). It might need the
+    When changing this function, check _my_b_read(). It might need the
     same change.
 
   RETURN
@@ -1105,14 +991,20 @@ static void unlock_io_cache(IO_CACHE *cache)
     1      Error: can't read requested characters
 */
 
-static int _my_b_cache_read_r(IO_CACHE *cache, uchar *Buffer, size_t Count)
+int _my_b_read_r(register IO_CACHE *cache, uchar *Buffer, size_t Count)
 {
   my_off_t pos_in_file;
-  size_t length, diff_length, left_length= 0;
+  size_t length, diff_length, left_length;
   IO_CACHE_SHARE *cshare= cache->share;
-  DBUG_ENTER("_my_b_cache_read_r");
-  DBUG_ASSERT(!(cache->myflags & MY_ENCRYPT));
+  DBUG_ENTER("_my_b_read_r");
 
+  if ((left_length= (size_t) (cache->read_end - cache->read_pos)))
+  {
+    DBUG_ASSERT(Count >= left_length);	/* User is not using my_b_read() */
+    memcpy(Buffer, cache->read_pos, left_length);
+    Buffer+= left_length;
+    Count-= left_length;
+  }
   while (Count)
   {
     size_t cnt, len;
@@ -1227,22 +1119,21 @@ static int _my_b_cache_read_r(IO_CACHE *cache, uchar *Buffer, size_t Count)
 */
 
 static void copy_to_read_buffer(IO_CACHE *write_cache,
-                                const uchar *write_buffer, my_off_t pos_in_file)
+                                const uchar *write_buffer, size_t write_length)
 {
-  size_t write_length= write_cache->pos_in_file - pos_in_file;
   IO_CACHE_SHARE *cshare= write_cache->share;
 
   DBUG_ASSERT(cshare->source_cache == write_cache);
   /*
     write_length is usually less or equal to buffer_length.
-    It can be bigger if _my_b_cache_write_r() is called with a big length.
+    It can be bigger if _my_b_write() is called with a big length.
   */
   while (write_length)
   {
     size_t copy_length= MY_MIN(write_length, write_cache->buffer_length);
     int  __attribute__((unused)) rc;
 
-    rc= lock_io_cache(write_cache, pos_in_file);
+    rc= lock_io_cache(write_cache, write_cache->pos_in_file);
     /* The writing thread does always have the lock when it awakes. */
     DBUG_ASSERT(rc);
 
@@ -1250,7 +1141,7 @@ static void copy_to_read_buffer(IO_CACHE *write_cache,
 
     cshare->error=       0;
     cshare->read_end=    cshare->buffer + copy_length;
-    cshare->pos_in_file= pos_in_file;
+    cshare->pos_in_file= write_cache->pos_in_file;
 
     /* Mark all threads as running and wake them. */
     unlock_io_cache(write_cache);
@@ -1274,12 +1165,20 @@ static void copy_to_read_buffer(IO_CACHE *write_cache,
     1  Failed to read
 */
 
-static int _my_b_seq_read(IO_CACHE *info, uchar *Buffer, size_t Count)
+int _my_b_seq_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
 {
-  size_t length, diff_length, left_length= 0, save_count, max_length;
+  size_t length, diff_length, left_length, save_count, max_length;
   my_off_t pos_in_file;
   save_count=Count;
 
+  /* first, read the regular buffer */
+  if ((left_length=(size_t) (info->read_end-info->read_pos)))
+  {
+    DBUG_ASSERT(Count > left_length);	/* User is not using my_b_read() */
+    memcpy(Buffer,info->read_pos, left_length);
+    Buffer+=left_length;
+    Count-=left_length;
+  }
   lock_append_buffer(info);
 
   /* pos_in_file always point on where info->buffer was read */
@@ -1307,7 +1206,7 @@ static int _my_b_seq_read(IO_CACHE *info, uchar *Buffer, size_t Count)
     /* Fill first intern buffer */
     size_t read_length;
 
-    length= IO_ROUND_DN(Count) - diff_length;
+    length=(Count & (size_t) ~(IO_SIZE-1))-diff_length;
     if ((read_length= mysql_file_read(info->file,Buffer, length,
                                       info->myflags)) == (size_t) -1)
     {
@@ -1424,14 +1323,18 @@ read_append_buffer:
      1          An error has occurred; IO_CACHE to error state.
 */
 
-int _my_b_async_read(IO_CACHE *info, uchar *Buffer, size_t Count)
+int _my_b_async_read(register IO_CACHE *info, uchar *Buffer, size_t Count)
 {
-  size_t length, read_length, diff_length, left_length=0, use_length, org_Count;
+  size_t length,read_length,diff_length,left_length,use_length,org_Count;
   size_t max_length;
   my_off_t next_pos_in_file;
   uchar *read_buffer;
 
+  memcpy(Buffer,info->read_pos,
+	 (left_length= (size_t) (info->read_end-info->read_pos)));
+  Buffer+=left_length;
   org_Count=Count;
+  Count-=left_length;
 
   if (info->inited)
   {						/* wait for read block */
@@ -1585,7 +1488,7 @@ int _my_b_async_read(IO_CACHE *info, uchar *Buffer, size_t Count)
 	info->read_end-=info->read_length;
       }
       info->read_length=info->buffer_length;	/* Use hole buffer */
-      info->read_function=_my_b_cache_read;     /* Use normal IO_READ next */
+      info->read_function=_my_b_read;		/* Use normal IO_READ next */
     }
     else
       info->inited=info->aio_result.pending=1;
@@ -1600,8 +1503,13 @@ int _my_b_async_read(IO_CACHE *info, uchar *Buffer, size_t Count)
 int _my_b_get(IO_CACHE *info)
 {
   uchar buff;
+  IO_CACHE_CALLBACK pre_read,post_read;
+  if ((pre_read = info->pre_read))
+    (*pre_read)(info);
   if ((*(info)->read_function)(info,&buff,1))
     return my_b_EOF;
+  if ((post_read = info->post_read))
+    (*post_read)(info);
   return (int) (uchar) buff;
 }
 
@@ -1615,61 +1523,70 @@ int _my_b_get(IO_CACHE *info)
    -1 On error; my_errno contains error code.
 */
 
-int _my_b_cache_write(IO_CACHE *info, const uchar *Buffer, size_t Count)
+int _my_b_write(register IO_CACHE *info, const uchar *Buffer, size_t Count)
 {
-  if (Buffer != info->write_buffer)
+  size_t rest_length,length;
+  my_off_t pos_in_file= info->pos_in_file;
+
+  DBUG_EXECUTE_IF("simulate_huge_load_data_file",
+                  {
+                    pos_in_file=(my_off_t)(5000000000ULL);
+                  });
+  if (pos_in_file+info->buffer_length > info->end_of_file)
   {
-    Count= IO_ROUND_DN(Count);
-    if (!Count)
-      return 0;
+    my_errno=errno=EFBIG;
+    return info->error = -1;
   }
 
-  if (info->seek_not_done)
-  {
-    /*
-      Whenever a function which operates on IO_CACHE flushes/writes
-      some part of the IO_CACHE to disk it will set the property
-      "seek_not_done" to indicate this to other functions operating
-      on the IO_CACHE.
-    */
-    if (mysql_file_seek(info->file, info->pos_in_file, MY_SEEK_SET,
-                        MYF(info->myflags & MY_WME)) == MY_FILEPOS_ERROR)
+  rest_length= (size_t) (info->write_end - info->write_pos);
+  memcpy(info->write_pos,Buffer,(size_t) rest_length);
+  Buffer+=rest_length;
+  Count-=rest_length;
+  info->write_pos+=rest_length;
+
+  if (my_b_flush_io_cache(info,1))
+    return 1;
+  if (Count >= IO_SIZE)
+  {					/* Fill first intern buffer */
+    length=Count & (size_t) ~(IO_SIZE-1);
+    if (info->seek_not_done)
     {
-      info->error= -1;
-      return 1;
+      /*
+        Whenever a function which operates on IO_CACHE flushes/writes
+        some part of the IO_CACHE to disk it will set the property
+        "seek_not_done" to indicate this to other functions operating
+        on the IO_CACHE.
+      */
+      if (mysql_file_seek(info->file, info->pos_in_file, MY_SEEK_SET, MYF(0)))
+      {
+        info->error= -1;
+        return (1);
+      }
+      info->seek_not_done=0;
     }
-    info->seek_not_done=0;
+    if (mysql_file_write(info->file, Buffer, length, info->myflags | MY_NABP))
+      return info->error= -1;
+
+    /*
+      In case of a shared I/O cache with a writer we normally do direct
+      write cache to read cache copy. Simulate this here by direct
+      caller buffer to read cache copy. Do it after the write so that
+      the cache readers actions on the flushed part can go in parallel
+      with the write of the extra stuff. copy_to_read_buffer()
+      synchronizes writer and readers so that after this call the
+      readers can act on the extra stuff while the writer can go ahead
+      and prepare the next output. copy_to_read_buffer() relies on
+      info->pos_in_file.
+    */
+    if (info->share)
+      copy_to_read_buffer(info, Buffer, length);
+
+    Count-=length;
+    Buffer+=length;
+    info->pos_in_file+=length;
   }
-  if (mysql_file_write(info->file, Buffer, Count, info->myflags | MY_NABP))
-    return info->error= -1;
-
-  info->pos_in_file+= Count;
-  return 0;
-}
-
-
-/*
-  In case of a shared I/O cache with a writer we normally do direct
-  write cache to read cache copy. Simulate this here by direct
-  caller buffer to read cache copy. Do it after the write so that
-  the cache readers actions on the flushed part can go in parallel
-  with the write of the extra stuff. copy_to_read_buffer()
-  synchronizes writer and readers so that after this call the
-  readers can act on the extra stuff while the writer can go ahead
-  and prepare the next output. copy_to_read_buffer() relies on
-  info->pos_in_file.
-*/
-static int _my_b_cache_write_r(IO_CACHE *info, const uchar *Buffer, size_t Count)
-{
-  my_off_t old_pos_in_file= info->pos_in_file;
-  int res= _my_b_cache_write(info, Buffer, Count);
-  if (res)
-    return res;
-
-  DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
-  DBUG_ASSERT(info->share);
-  copy_to_read_buffer(info, Buffer, old_pos_in_file);
-
+  memcpy(info->write_pos,Buffer,(size_t) Count);
+  info->write_pos+=Count;
   return 0;
 }
 
@@ -1680,7 +1597,7 @@ static int _my_b_cache_write_r(IO_CACHE *info, const uchar *Buffer, size_t Count
   the write buffer before we are ready with it.
 */
 
-int my_b_append(IO_CACHE *info, const uchar *Buffer, size_t Count)
+int my_b_append(register IO_CACHE *info, const uchar *Buffer, size_t Count)
 {
   size_t rest_length,length;
 
@@ -1689,7 +1606,6 @@ int my_b_append(IO_CACHE *info, const uchar *Buffer, size_t Count)
     day, we might need to add a call to copy_to_read_buffer().
   */
   DBUG_ASSERT(!info->share);
-  DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
 
   lock_append_buffer(info);
   rest_length= (size_t) (info->write_end - info->write_pos);
@@ -1706,7 +1622,7 @@ int my_b_append(IO_CACHE *info, const uchar *Buffer, size_t Count)
   }
   if (Count >= IO_SIZE)
   {					/* Fill first intern buffer */
-    length= IO_ROUND_DN(Count);
+    length=Count & (size_t) ~(IO_SIZE-1);
     if (mysql_file_write(info->file,Buffer, length, info->myflags | MY_NABP))
     {
       unlock_append_buffer(info);
@@ -1745,7 +1661,7 @@ int my_b_safe_write(IO_CACHE *info, const uchar *Buffer, size_t Count)
   we will never get a seek over the end of the buffer
 */
 
-int my_block_write(IO_CACHE *info, const uchar *Buffer, size_t Count,
+int my_block_write(register IO_CACHE *info, const uchar *Buffer, size_t Count,
 		   my_off_t pos)
 {
   size_t length;
@@ -1756,7 +1672,6 @@ int my_block_write(IO_CACHE *info, const uchar *Buffer, size_t Count,
     day, we might need to add a call to copy_to_read_buffer().
   */
   DBUG_ASSERT(!info->share);
-  DBUG_ASSERT(!(info->myflags & MY_ENCRYPT));
 
   if (pos < info->pos_in_file)
   {
@@ -1804,9 +1719,11 @@ int my_block_write(IO_CACHE *info, const uchar *Buffer, size_t Count,
 #define UNLOCK_APPEND_BUFFER if (need_append_buffer_lock) \
   unlock_append_buffer(info);
 
-int my_b_flush_io_cache(IO_CACHE *info, int need_append_buffer_lock)
+int my_b_flush_io_cache(IO_CACHE *info,
+                        int need_append_buffer_lock __attribute__((unused)))
 {
   size_t length;
+  my_off_t pos_in_file;
   my_bool append_cache= (info->type == SEQ_READ_APPEND);
   DBUG_ENTER("my_b_flush_io_cache");
   DBUG_PRINT("enter", ("cache: 0x%lx", (long) info));
@@ -1825,30 +1742,52 @@ int my_b_flush_io_cache(IO_CACHE *info, int need_append_buffer_lock)
 
     if ((length=(size_t) (info->write_pos - info->write_buffer)))
     {
-      if (append_cache)
+      /*
+        In case of a shared I/O cache with a writer we do direct write
+        cache to read cache copy. Do it before the write here so that
+        the readers can work in parallel with the write.
+        copy_to_read_buffer() relies on info->pos_in_file.
+      */
+      if (info->share)
+        copy_to_read_buffer(info, info->write_buffer, length);
+
+      pos_in_file=info->pos_in_file;
+      /*
+	If we have append cache, we always open the file with
+	O_APPEND which moves the pos to EOF automatically on every write
+      */
+      if (!append_cache && info->seek_not_done)
+      {					/* File touched, do seek */
+	if (mysql_file_seek(info->file, pos_in_file, MY_SEEK_SET, MYF(info->myflags & MY_WME)) ==
+	    MY_FILEPOS_ERROR)
+	{
+	  UNLOCK_APPEND_BUFFER;
+	  DBUG_RETURN((info->error= -1));
+	}
+	if (!append_cache)
+	  info->seek_not_done=0;
+      }
+      if (!append_cache)
+	info->pos_in_file+=length;
+      info->write_end= (info->write_buffer+info->buffer_length-
+			((pos_in_file+length) & (IO_SIZE-1)));
+
+      if (mysql_file_write(info->file,info->write_buffer,length,
+		   info->myflags | MY_NABP))
+	info->error= -1;
+      else
+	info->error= 0;
+      if (!append_cache)
       {
-
-        if (mysql_file_write(info->file, info->write_buffer, length,
-                             info->myflags | MY_NABP))
-          info->error= -1;
-        else
-          info->error= 0;
-
-        info->end_of_file+= info->write_pos - info->append_read_pos;
-        info->append_read_pos= info->write_buffer;
-        DBUG_ASSERT(info->end_of_file == mysql_file_tell(info->file, MYF(0)));
+        set_if_bigger(info->end_of_file,(pos_in_file+length));
       }
       else
       {
-        int res= info->write_function(info, info->write_buffer, length);
-        if (res)
-          DBUG_RETURN(res);
-
-        set_if_bigger(info->end_of_file, info->pos_in_file);
+	info->end_of_file+=(info->write_pos-info->append_read_pos);
+	DBUG_ASSERT(info->end_of_file == mysql_file_tell(info->file, MYF(0)));
       }
-      info->write_end= (info->write_buffer + info->buffer_length -
-                        ((info->pos_in_file + length) & (IO_SIZE - 1)));
-      info->write_pos= info->write_buffer;
+
+      info->append_read_pos=info->write_pos=info->write_buffer;
       ++info->disk_writes;
       UNLOCK_APPEND_BUFFER;
       DBUG_RETURN(info->error);
@@ -1886,6 +1825,7 @@ int my_b_flush_io_cache(IO_CACHE *info, int need_append_buffer_lock)
 int end_io_cache(IO_CACHE *info)
 {
   int error=0;
+  IO_CACHE_CALLBACK pre_close;
   DBUG_ENTER("end_io_cache");
   DBUG_PRINT("enter",("cache: 0x%lx", (ulong) info));
 
@@ -1895,6 +1835,11 @@ int end_io_cache(IO_CACHE *info)
   */
   DBUG_ASSERT(!info->share || !info->share->total_threads);
 
+  if ((pre_close=info->pre_close))
+  {
+    (*pre_close)(info);
+    info->pre_close= 0;
+  }
   if (info->alloced_buffer)
   {
     info->alloced_buffer=0;
@@ -1999,7 +1944,7 @@ int main(int argc, char** argv)
   /* check correctness of tests */
   if (total_bytes != status.st_size)
   {
-    fprintf(stderr,"Not the same number of bytes actually  in file as bytes \
+    fprintf(stderr,"Not the same number of bytes acutally  in file as bytes \
 supposedly written\n");
     error=1;
   }

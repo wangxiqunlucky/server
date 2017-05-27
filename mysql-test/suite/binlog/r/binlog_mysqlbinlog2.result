@@ -1,4 +1,3 @@
-set sql_mode="";
 drop table if exists t1;
 reset master;
 set @a=UNIX_TIMESTAMP("2020-01-21 15:32:22");

@@ -1,6 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2011, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -39,10 +40,6 @@ Created 2011-05-26 Marko Makela
 #include "handler0alter.h"
 
 #include<map>
-
-ulint onlineddl_rowlog_rows;
-ulint onlineddl_rowlog_pct_used;
-ulint onlineddl_pct_progress;
 
 /** Table row modification operations during online table rebuild.
 Delete-marked records are not copied to the rebuilt table. */
@@ -367,9 +364,9 @@ row_log_online_op(
 			goto err_exit;
 		}
 
-		ret = os_file_write(
+		ret = os_file_write_int_fd(
 			"(modification log)",
-			OS_FILE_FROM_FD(log->fd),
+			log->fd,
 			log->tail.block, byte_offset, srv_sort_buf_size);
 		log->tail.blocks++;
 		if (!ret) {
@@ -483,9 +480,9 @@ row_log_table_close_func(
 			goto err_exit;
 		}
 
-		ret = os_file_write(
+		ret = os_file_write_int_fd(
 			"(modification log)",
-			OS_FILE_FROM_FD(log->fd),
+			log->fd,
 			log->tail.block, byte_offset, srv_sort_buf_size);
 		log->tail.blocks++;
 		if (!ret) {
@@ -504,10 +501,6 @@ write_failed:
 	UNIV_MEM_INVALID(log->tail.buf, sizeof log->tail.buf);
 err_exit:
 	mutex_exit(&log->mutex);
-
-	os_atomic_increment_ulint(&onlineddl_rowlog_rows, 1);
-	/* 10000 means 100.00%, 4525 means 45.25% */
-	onlineddl_rowlog_pct_used = (log->tail.total * 10000) / srv_online_max_size;
 }
 
 #ifdef UNIV_DEBUG
@@ -1880,6 +1873,7 @@ row_log_table_apply_update(
 
 		When applying the subsequent ROW_T_DELETE, no matching
 		record will be found. */
+		/* fall through */
 	case DB_SUCCESS:
 		ut_ad(row != NULL);
 		break;
@@ -2617,11 +2611,10 @@ all_done:
 			goto func_exit;
 		}
 
-		success = os_file_read_no_error_handling(
-			OS_FILE_FROM_FD(index->online_log->fd),
+		success = os_file_read_no_error_handling_int_fd(
+			index->online_log->fd,
 			index->online_log->head.block, ofs,
 			srv_sort_buf_size);
-
 		if (!success) {
 			fprintf(stderr, "InnoDB: unable to read temporary file"
 				" for table %s\n", index->table_name);
@@ -3444,8 +3437,8 @@ all_done:
 			goto func_exit;
 		}
 
-		success = os_file_read_no_error_handling(
-			OS_FILE_FROM_FD(index->online_log->fd),
+		success = os_file_read_no_error_handling_int_fd(
+			index->online_log->fd,
 			index->online_log->head.block, ofs,
 			srv_sort_buf_size);
 

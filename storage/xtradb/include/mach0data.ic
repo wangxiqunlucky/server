@@ -1,6 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 1995, 2009, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -38,7 +39,7 @@ mach_write_to_1(
 	ulint	n)	/*!< in: ulint integer to be stored, >= 0, < 256 */
 {
 	ut_ad(b);
-	ut_ad((n & ~0xFFUL) == 0);
+	ut_ad((n | 0xFFUL) <= 0xFFUL);
 
 	b[0] = (byte) n;
 }
@@ -66,7 +67,7 @@ mach_write_to_2(
 	ulint	n)	/*!< in: ulint integer to be stored */
 {
 	ut_ad(b);
-	ut_ad((n & ~0xFFFFUL) == 0);
+	ut_ad((n | 0xFFFFUL) <= 0xFFFFUL);
 
 	b[0] = (byte)(n >> 8);
 	b[1] = (byte)(n);
@@ -114,7 +115,7 @@ mach_write_to_3(
 	ulint	n)	/*!< in: ulint integer to be stored */
 {
 	ut_ad(b);
-	ut_ad((n & ~0xFFFFFFUL) == 0);
+	ut_ad((n | 0xFFFFFFUL) <= 0xFFFFFFUL);
 
 	b[0] = (byte)(n >> 16);
 	b[1] = (byte)(n >> 8);
@@ -779,13 +780,13 @@ mach_swap_byte_order(
         dest += len;
 
         switch (len & 0x7) {
-        case 0: *--dest = *from++;
-        case 7: *--dest = *from++;
-        case 6: *--dest = *from++;
-        case 5: *--dest = *from++;
-        case 4: *--dest = *from++;
-        case 3: *--dest = *from++;
-        case 2: *--dest = *from++;
+        case 0: *--dest = *from++; /* fall through */
+        case 7: *--dest = *from++; /* fall through */
+        case 6: *--dest = *from++; /* fall through */
+        case 5: *--dest = *from++; /* fall through */
+        case 4: *--dest = *from++; /* fall through */
+        case 3: *--dest = *from++; /* fall through */
+        case 2: *--dest = *from++; /* fall through */
         case 1: *--dest = *from;
         }
 }

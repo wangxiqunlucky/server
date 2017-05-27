@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #ifndef GCALC_TOOLS_INCLUDED
@@ -82,12 +82,6 @@ public:
     shape_polygon= 2,
     shape_hole= 3
   };
-  enum count_result
-  {
-    result_false= 0,
-    result_true= 1,
-    result_unknown= 2
-  };
   Gcalc_function() : n_shapes(0) {}
   gcalc_shape_info add_new_shape(uint32 shape_id, shape_type shape_kind);
   /*
@@ -122,8 +116,6 @@ public:
   int get_b_state(gcalc_shape_info shape) { return b_states[shape]; }
   int count()
     { return count_internal(function_buffer.ptr(), 0, 0); }
-  int count_last()
-    { return count_internal(function_buffer.ptr(), 1, 0); }
   void clear_i_states();
   void clear_b_states();
   void reset();

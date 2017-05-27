@@ -27,8 +27,8 @@
 use strict;
 use Getopt::Long;
 
-# t=time, l=lock time, r=rows, a=rows affected
-# at, al, ar and aa are the corresponding averages
+# t=time, l=lock time, r=rows
+# at, al, and ar are the corresponding averages
 
 my %opt = (
     s => 'at',
@@ -110,11 +110,9 @@ while ( defined($_ = shift @pending) or defined($_ = <>) ) {
     s/^#? Time: \d{6}\s+\d+:\d+:\d+.*\n//;
     my ($user,$host) = s/^#? User\@Host:\s+(\S+)\s+\@\s+(\S+).*\n// ? ($1,$2) : ('','');
 
-    s/^# Thread_id: [0-9]+\s+Schema: .*\s+QC_hit:.*[^\n]+\n//;
+    s/^# Thread_id: [0-9]+\s+Schema: [^\n]+\n//;
     s/^# Query_time: ([0-9.]+)\s+Lock_time: ([0-9.]+)\s+Rows_sent: ([0-9.]+)\s+Rows_examined: ([0-9.]+).*\n//;
     my ($t, $l, $r, $e) = ($1, $2, $3, $4);
-    s/^# Rows_affected: ([0-9.]+).*\n//;
-    my ($a) = ($1);
 
     $t -= $l unless $opt{l};
 
@@ -158,7 +156,6 @@ while ( defined($_ = shift @pending) or defined($_ = <>) ) {
     $s->{l} += $l;
     $s->{r} += $r;
     $s->{e} += $e;
-    $s->{a} += $a;
     $s->{users}->{$user}++ if $user;
     $s->{hosts}->{$host}++ if $host;
 
@@ -167,12 +164,11 @@ while ( defined($_ = shift @pending) or defined($_ = <>) ) {
 
 foreach (keys %stmt) {
     my $v = $stmt{$_} || die;
-    my ($c, $t, $l, $r, $e, $a) = @{ $v }{qw(c t l r e a)};
+    my ($c, $t, $l, $r, $e) = @{ $v }{qw(c t l r e)};
     $v->{at} = $t / $c;
     $v->{al} = $l / $c;
     $v->{ar} = $r / $c;
     $v->{ae} = $e / $c;
-    $v->{aa} = $a / $c;
 }
 
 my @sorted = sort { $stmt{$b}->{$opt{s}} <=> $stmt{$a}->{$opt{s}} } keys %stmt;
@@ -181,13 +177,13 @@ my @sorted = sort { $stmt{$b}->{$opt{s}} <=> $stmt{$a}->{$opt{s}} } keys %stmt;
 
 foreach (@sorted) {
     my $v = $stmt{$_} || die;
-    my ($c, $t, $at, $l, $al, $r, $ar, $e, $ae, $a, $aa) = @{ $v }{qw(c t at l al r ar e ae a aa)};
+    my ($c, $t,$at, $l,$al, $r,$ar,$e, $ae) = @{ $v }{qw(c t at l al r ar e ae)};
     my @users = keys %{$v->{users}};
     my $user  = (@users==1) ? $users[0] : sprintf "%dusers",scalar @users;
     my @hosts = keys %{$v->{hosts}};
     my $host  = (@hosts==1) ? $hosts[0] : sprintf "%dhosts",scalar @hosts;
-    printf "Count: %d  Time=%.2fs (%ds)  Lock=%.2fs (%ds)  Rows_sent=%.1f (%d), Rows_examined=%.1f (%d), Rows_affected=%.1f (%d), $user\@$host\n%s\n\n",
-	    $c, $at,$t, $al,$l, $ar,$r, $ae, $e, $aa, $a, $_;
+    printf "Count: %d  Time=%.2fs (%ds)  Lock=%.2fs (%ds)  Rows_sent=%.1f (%d), Rows_examined=%.1f (%d), $user\@$host\n%s\n\n",
+	    $c, $at,$t, $al,$l, $ar,$r, $ae, $e, $_;
 }
 
 sub usage {
@@ -207,7 +203,6 @@ Parse and summarize the MySQL slow query log. Options are
                 al: average lock time
                 ar: average rows sent
                 at: average query time
-                aa: average rows affected
                  c: count
                  l: lock time
                  r: rows sent

@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "sql_select.h"
 #include "sql_test.h"
@@ -181,8 +181,8 @@ bool uses_index_fields_only(Item *item, TABLE *tbl, uint keyno,
     Index condition, or NULL if no condition could be inferred.
 */
 
-static Item *make_cond_for_index(THD *thd, Item *cond, TABLE *table, uint keyno,
-                                 bool other_tbls_ok)
+Item *make_cond_for_index(Item *cond, TABLE *table, uint keyno,
+                          bool other_tbls_ok)
 {
   if (!cond)
     return NULL;
@@ -192,17 +192,17 @@ static Item *make_cond_for_index(THD *thd, Item *cond, TABLE *table, uint keyno,
     if (((Item_cond*) cond)->functype() == Item_func::COND_AND_FUNC)
     {
       table_map used_tables= 0;
-      Item_cond_and *new_cond= new (thd->mem_root) Item_cond_and(thd);
+      Item_cond_and *new_cond=new Item_cond_and;
       if (!new_cond)
 	return (COND*) 0;
       List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
       Item *item;
       while ((item=li++))
       {
-	Item *fix= make_cond_for_index(thd, item, table, keyno, other_tbls_ok);
+	Item *fix= make_cond_for_index(item, table, keyno, other_tbls_ok);
 	if (fix)
         {
-	  new_cond->argument_list()->push_back(fix, thd->mem_root);
+	  new_cond->argument_list()->push_back(fix);
           used_tables|= fix->used_tables();
         }
         if (MY_TEST(item->marker == ICP_COND_USES_INDEX_ONLY))
@@ -227,17 +227,17 @@ static Item *make_cond_for_index(THD *thd, Item *cond, TABLE *table, uint keyno,
     }
     else /* It's OR */
     {
-      Item_cond_or *new_cond= new (thd->mem_root) Item_cond_or(thd);
+      Item_cond_or *new_cond=new Item_cond_or;
       if (!new_cond)
 	return (COND*) 0;
       List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
       Item *item;
       while ((item=li++))
       {
-        Item *fix= make_cond_for_index(thd, item, table, keyno, other_tbls_ok);
+	Item *fix= make_cond_for_index(item, table, keyno, other_tbls_ok);
 	if (!fix)
 	  return (COND*) 0;
-	new_cond->argument_list()->push_back(fix, thd->mem_root);
+	new_cond->argument_list()->push_back(fix);
         if (MY_TEST(item->marker == ICP_COND_USES_INDEX_ONLY))
         {
           n_marked++;
@@ -260,8 +260,8 @@ static Item *make_cond_for_index(THD *thd, Item *cond, TABLE *table, uint keyno,
 }
 
 
-static Item *make_cond_remainder(THD *thd, Item *cond, TABLE *table, uint keyno,
-                                 bool other_tbls_ok, bool exclude_index)
+Item *make_cond_remainder(Item *cond, TABLE *table, uint keyno,
+                          bool other_tbls_ok, bool exclude_index)
 {
   if (cond->type() == Item::COND_ITEM)
   {
@@ -269,18 +269,18 @@ static Item *make_cond_remainder(THD *thd, Item *cond, TABLE *table, uint keyno,
     if (((Item_cond*) cond)->functype() == Item_func::COND_AND_FUNC)
     {
       /* Create new top level AND item */
-      Item_cond_and *new_cond= new (thd->mem_root) Item_cond_and(thd);
+      Item_cond_and *new_cond=new Item_cond_and;
       if (!new_cond)
 	return (COND*) 0;
       List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
       Item *item;
       while ((item=li++))
       {
-        Item *fix= make_cond_remainder(thd, item, table, keyno,
+	Item *fix= make_cond_remainder(item, table, keyno,
                                        other_tbls_ok, exclude_index);
 	if (fix)
         {
-	  new_cond->argument_list()->push_back(fix, thd->mem_root);
+	  new_cond->argument_list()->push_back(fix);
           tbl_map |= fix->used_tables();
         }
       }
@@ -297,18 +297,18 @@ static Item *make_cond_remainder(THD *thd, Item *cond, TABLE *table, uint keyno,
     }
     else /* It's OR */
     {
-      Item_cond_or *new_cond= new (thd->mem_root) Item_cond_or(thd);
+      Item_cond_or *new_cond=new Item_cond_or;
       if (!new_cond)
 	return (COND*) 0;
       List_iterator<Item> li(*((Item_cond*) cond)->argument_list());
       Item *item;
       while ((item=li++))
       {
-        Item *fix= make_cond_remainder(thd, item, table, keyno,
+	Item *fix= make_cond_remainder(item, table, keyno, 
                                        other_tbls_ok, FALSE);
 	if (!fix)
 	  return (COND*) 0;
-	new_cond->argument_list()->push_back(fix, thd->mem_root);
+	new_cond->argument_list()->push_back(fix);
         tbl_map |= fix->used_tables();
       }
       new_cond->quick_fix_field();
@@ -366,8 +366,8 @@ void push_index_cond(JOIN_TAB *tab, uint keyno)
     DBUG_EXECUTE("where",
                  print_where(tab->select_cond, "full cond", QT_ORDINARY););
 
-    idx_cond= make_cond_for_index(tab->join->thd, tab->select_cond, tab->table,
-                                  keyno, tab->icp_other_tables_ok);
+    idx_cond= make_cond_for_index(tab->select_cond, tab->table, keyno,
+                                  tab->icp_other_tables_ok);
 
     DBUG_EXECUTE("where",
                  print_where(idx_cond, "idx cond", QT_ORDINARY););
@@ -406,8 +406,7 @@ void push_index_cond(JOIN_TAB *tab, uint keyno)
         tab->ref.disable_cache= TRUE;
 
       Item *row_cond= tab->idx_cond_fact_out ? 
-                        make_cond_remainder(tab->join->thd, tab->select_cond,
-                                            tab->table, keyno,
+	                make_cond_remainder(tab->select_cond, tab->table, keyno,
 			                    tab->icp_other_tables_ok, TRUE) :
 	                tab->pre_idx_push_select_cond;
 
@@ -420,8 +419,7 @@ void push_index_cond(JOIN_TAB *tab, uint keyno)
           tab->select_cond= row_cond;
         else
         {
-          COND *new_cond= new (tab->join->thd->mem_root)
-            Item_cond_and(tab->join->thd, row_cond, idx_remainder_cond);
+          COND *new_cond= new Item_cond_and(row_cond, idx_remainder_cond);
           tab->select_cond= new_cond;
 	  tab->select_cond->quick_fix_field();
           ((Item_cond_and*)tab->select_cond)->used_tables_cache= 

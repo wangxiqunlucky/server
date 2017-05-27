@@ -1,6 +1,6 @@
 /*
    Copyright (c) 2000, 2013, Oracle and/or its affiliates.
-   Copyright (c) 2010, 2016, MariaDB
+   Copyright (c) 2010, 2017, MariaDB
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -39,7 +39,7 @@
 ** 10 Jun 2003: SET NAMES and --no-set-names by Alexander Barkov
 */
 
-#define DUMP_VERSION "10.16"
+#define DUMP_VERSION "10.15"
 
 #include <my_global.h>
 #include <my_sys.h>
@@ -114,7 +114,7 @@ static my_bool  verbose= 0, opt_no_create_info= 0, opt_no_data= 0, opt_no_data_m
                 opt_slave_apply= 0, 
                 opt_include_master_host_port= 0,
                 opt_events= 0, opt_comments_used= 0,
-                opt_alltspcs=0, opt_notspcs= 0, opt_logging;
+                opt_alltspcs=0, opt_notspcs= 0;
 static my_bool insert_pat_inited= 0, debug_info_flag= 0, debug_check_flag= 0;
 static ulong opt_max_allowed_packet, opt_net_buffer_length;
 static MYSQL mysql_connection,*mysql=0;
@@ -358,7 +358,7 @@ static struct my_option my_long_options[] =
   {"force", 'f', "Continue even if we get an SQL error.",
    &ignore_errors, &ignore_errors, 0, GET_BOOL, NO_ARG,
    0, 0, 0, 0, 0, 0},
-  {"gtid", 0, "Used together with --master-data=1 or --dump-slave=1."
+  {"gtid", OPT_USE_GTID, "Used together with --master-data=1 or --dump-slave=1."
    "When enabled, the output from those options will set the GTID position "
    "instead of the binlog file and offset; the file/offset will appear only as "
    "a comment. When disabled, the GTID position will still appear in the "
@@ -400,8 +400,6 @@ static struct my_option my_long_options[] =
   {"log-error", OPT_ERROR_LOG_FILE, "Append warnings and errors to given file.",
    &log_error_file, &log_error_file, 0, GET_STR,
    REQUIRED_ARG, 0, 0, 0, 0, 0, 0},
-  {"log-queries", 0, "When restoring the dump, the server will, if logging turned on, log the queries to the general and slow query log.",
-   &opt_logging, &opt_logging, 0, GET_BOOL, NO_ARG, 1, 0, 0, 0, 0, 0},
   {"master-data", OPT_MASTER_DATA,
    "This causes the binary log position and filename to be appended to the "
    "output. If equal to 1, will print it as a CHANGE MASTER command; if equal"
@@ -709,10 +707,6 @@ static void write_header(FILE *sql_file, char *db_name)
                  );
     print_comment(sql_file, 0, "-- Server version\t%s\n",
                   mysql_get_server_info(&mysql_connection));
-
-    if (!opt_logging)
-      fprintf(sql_file,
-"\n/*M!100101 SET LOCAL SQL_LOG_OFF=0, LOCAL SLOW_QUERY_LOG=0 */;");
 
     if (opt_set_charset)
       fprintf(sql_file,
@@ -1778,11 +1772,11 @@ static my_bool test_if_special_chars(const char *str)
 } /* test_if_special_chars */
 
 
+
 /*
   quote_name(name, buff, force)
 
-  Quotes a string, if it requires quoting. To force quoting regardless
-  of the characters within the string, the force flag can be set to true.
+  Quotes char string, taking into account compatible mode
 
   Args
 
@@ -1791,8 +1785,8 @@ static my_bool test_if_special_chars(const char *str)
   force                Flag to make it ignore 'test_if_special_chars'
 
   Returns
-     A pointer to the quoted string, or the original string if nothing has
-     changed.
+
+  buff                 quoted string
 
 */
 static char *quote_name(const char *name, char *buff, my_bool force)
@@ -1856,26 +1850,6 @@ static char *quote_for_like(const char *name, char *buff)
   to[0]= '\'';
   to[1]= 0;
   return buff;
-}
-
-static char *quote_for_equal(const char *name, char *buff)
-{
-  char *to= buff;
-  *to++= '\'';
-  while (*name)
-  {
-    if (*name == '\\')
-    {
-      *to++='\\';
-    }
-    if (*name == '\'')
-      *to++= '\\';
-    *to++= *name++;
-  }
-  to[0]= '\'';
-  to[1]= 0;
-  return buff;
-
 }
 
 
@@ -2168,6 +2142,7 @@ static void print_xml_comment(FILE *xml_file, size_t len,
     case '-':
       if (*(comment_string + 1) == '-')         /* Only one hyphen allowed. */
         break;
+      /* fall through */
     default:
       fputc(*comment_string, xml_file);
       break;
@@ -2204,7 +2179,6 @@ static void print_comment(FILE *sql_file, my_bool is_error, const char *format,
 
   print_xml_comment(sql_file, strlen(comment_buff), comment_buff);
 }
-
 
 /*
  create_delimiter
@@ -2550,7 +2524,7 @@ static uint dump_routines_for_db(char *db)
                           query_buff);
             print_comment(sql_file, 1,
                           "-- does %s have permissions on mysql.proc?\n\n",
-                          current_user);
+                          fix_for_comment(current_user));
             maybe_die(EX_MYSQLERR,"%s has insufficent privileges to %s!",
                       current_user, query_buff);
           }
@@ -2690,7 +2664,6 @@ static uint get_table_structure(char *table, char *db, char *table_type,
   const char *insert_option;
   char	     name_buff[NAME_LEN+3],table_buff[NAME_LEN*2+3];
   char       table_buff2[NAME_LEN*2+3], query_buff[QUERY_LENGTH];
-  char       temp_buff[NAME_LEN*2 + 3], temp_buff2[NAME_LEN*2 + 3];
   const char *show_fields_stmt= "SELECT `COLUMN_NAME` AS `Field`, "
                                 "`COLUMN_TYPE` AS `Type`, "
                                 "`IS_NULLABLE` AS `Null`, "
@@ -2699,7 +2672,7 @@ static uint get_table_structure(char *table, char *db, char *table_type,
                                 "`EXTRA` AS `Extra`, "
                                 "`COLUMN_COMMENT` AS `Comment` "
                                 "FROM `INFORMATION_SCHEMA`.`COLUMNS` WHERE "
-                                "TABLE_SCHEMA = %s AND TABLE_NAME = %s";
+                                "TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s'";
   FILE       *sql_file= md_result_file;
   int        len;
   my_bool    is_log_table;
@@ -2845,6 +2818,8 @@ static uint get_table_structure(char *table, char *db, char *table_type,
 
           my_free(scv_buff);
 
+          if (path)
+            my_fclose(sql_file, MYF(MY_WME));
           DBUG_RETURN(0);
         }
         else
@@ -3012,9 +2987,7 @@ static uint get_table_structure(char *table, char *db, char *table_type,
     verbose_msg("%s: Warning: Can't set SQL_QUOTE_SHOW_CREATE option (%s)\n",
                 my_progname_short, mysql_error(mysql));
 
-    my_snprintf(query_buff, sizeof(query_buff), show_fields_stmt,
-                quote_for_equal(db, temp_buff),
-                quote_for_equal(table, temp_buff2));
+    my_snprintf(query_buff, sizeof(query_buff), show_fields_stmt, db, table);
 
     if (mysql_query_with_error_report(mysql, &result, query_buff))
       DBUG_RETURN(0);
@@ -3431,10 +3404,8 @@ static int dump_triggers_for_table(char *table_name, char *db_name)
   /* Get list of triggers. */
 
   my_snprintf(query_buff, sizeof(query_buff),
-              "SELECT TRIGGER_NAME FROM INFORMATION_SCHEMA.TRIGGERS "
-              "WHERE EVENT_OBJECT_SCHEMA = DATABASE() AND "
-              "EVENT_OBJECT_TABLE = %s",
-              quote_for_equal(table_name, name_buff));
+              "SHOW TRIGGERS LIKE %s",
+              quote_for_like(table_name, name_buff));
 
   if (mysql_query_with_error_report(mysql, &show_triggers_rs, query_buff))
     goto done;
@@ -4798,37 +4769,29 @@ static my_bool dump_all_views_in_db(char *database)
 
 
 /*
-  See get_actual_table_name. Used to retrieve the correct table name
-  from the database schema.
+  get_actual_table_name -- executes a SHOW TABLES LIKE '%s' to get the actual
+  table name from the server for the table name given on the command line.
+  we do this because the table name given on the command line may be a
+  different case (e.g.  T1 vs t1)
+
+  RETURN
+    pointer to the table name
+    0 if error
 */
-static char *get_actual_table_name_helper(const char *old_table_name,
-                                          my_bool case_sensitive,
-                                          MEM_ROOT *root)
+
+static char *get_actual_table_name(const char *old_table_name, MEM_ROOT *root)
 {
   char *name= 0;
   MYSQL_RES  *table_res;
   MYSQL_ROW  row;
   char query[50 + 2*NAME_LEN];
   char show_name_buff[FN_REFLEN];
-  DBUG_ENTER("get_actual_table_name_helper");
+  DBUG_ENTER("get_actual_table_name");
 
   /* Check memory for quote_for_like() */
   DBUG_ASSERT(2*sizeof(old_table_name) < sizeof(show_name_buff));
-
-  if (case_sensitive)
-  {
-    DBUG_PRINT("info", ("case sensitive search"));
-    my_snprintf(query, sizeof(query),
-                "SELECT table_name FROM INFORMATION_SCHEMA.TABLES "
-                "WHERE table_schema = DATABASE() AND table_name = %s",
-                quote_for_equal(old_table_name, show_name_buff));
-  }
-  else
-  {
-    DBUG_PRINT("info", ("case insensitive search"));
-    my_snprintf(query, sizeof(query), "SHOW TABLES LIKE %s",
-                quote_for_like(old_table_name, show_name_buff));
-  }
+  my_snprintf(query, sizeof(query), "SHOW TABLES LIKE %s",
+              quote_for_like(old_table_name, show_name_buff));
 
   if (mysql_query_with_error_report(mysql, 0, query))
     return NullS;
@@ -4853,67 +4816,12 @@ static char *get_actual_table_name_helper(const char *old_table_name,
   DBUG_RETURN(name);
 }
 
-/*
-  get_actual_table_name -- executes a SELECT .. FROM I_S.tables to check
-  if the table name given on the command line matches the one in the database.
-  If the table is not found, it falls back to a slower SHOW TABLES LIKE '%s' to
-  get the actual table name from the server.
-
-  We do this because the table name given on the command line may be a
-  different case (e.g.  T1 vs t1), but checking this takes a long time
-  when there are many tables present.
-
-  RETURN
-    pointer to the table name
-    0 if error
-*/
-
-static char *get_actual_table_name(const char *old_table_name,
-                                   int lower_case_table_names,
-                                   MEM_ROOT *root)
-{
-  char *name= 0;
-  DBUG_ENTER("get_actual_table_name");
-
-  name= get_actual_table_name_helper(old_table_name, TRUE, root);
-  if (!name && !lower_case_table_names)
-    name= get_actual_table_name_helper(old_table_name, FALSE, root);
-  DBUG_RETURN(name);
-}
-
-/*
-  Retrieve the value for the server system variable lower_case_table_names.
-
-  RETURN
-    0 case sensitive.
-    > 0 case insensitive
-*/
-static int get_sys_var_lower_case_table_names()
-{
-  int lower_case_table_names = 0;
-  MYSQL_RES  *table_res;
-  MYSQL_ROW  row;
-  const char *show_var_query = "SHOW VARIABLES LIKE 'lower_case_table_names'";
-  if (mysql_query_with_error_report(mysql, &table_res, show_var_query))
-    return 0; /* In case of error, assume default value of 0 */
-
-  if ((row= mysql_fetch_row(table_res)))
-  {
-    lower_case_table_names= atoi(row[1]);
-    mysql_free_result(table_res);
-  }
-
-  return lower_case_table_names;
-}
-
-
 
 static int dump_selected_tables(char *db, char **table_names, int tables)
 {
   char table_buff[NAME_LEN*2+3];
   DYNAMIC_STRING lock_tables_query;
   char **dump_tables, **pos, **end;
-  int lower_case_table_names;
   DBUG_ENTER("dump_selected_tables");
 
   if (init_dumping(db, init_dumping_tables))
@@ -4924,15 +4832,11 @@ static int dump_selected_tables(char *db, char **table_names, int tables)
                                               tables * sizeof(char *))))
      die(EX_EOM, "alloc_root failure.");
 
-  /* Figure out how to compare table names. */
-  lower_case_table_names = get_sys_var_lower_case_table_names();
-
   init_dynamic_string_checked(&lock_tables_query, "LOCK TABLES ", 256, 1024);
   for (; tables > 0 ; tables-- , table_names++)
   {
     /* the table name passed on commandline may be wrong case */
-    if ((*pos= get_actual_table_name(*table_names, lower_case_table_names,
-                                     &glob_root)))
+    if ((*pos= get_actual_table_name(*table_names, &glob_root)))
     {
       /* Add found table name to lock_tables_query */
       if (lock_tables)
@@ -5548,10 +5452,8 @@ char check_if_ignore_table(const char *table_name, char *table_type)
 
   /* Check memory for quote_for_like() */
   DBUG_ASSERT(2*sizeof(table_name) < sizeof(show_name_buff));
-  my_snprintf(buff, sizeof(buff),
-              "SELECT engine FROM INFORMATION_SCHEMA.TABLES "
-              "WHERE table_schema = DATABASE() AND table_name = %s",
-              quote_for_equal(table_name, show_name_buff));
+  my_snprintf(buff, sizeof(buff), "show table status like %s",
+              quote_for_like(table_name, show_name_buff));
   if (mysql_query_with_error_report(mysql, &res, buff))
   {
     if (mysql_errno(mysql) != ER_PARSE_ERROR)
@@ -5569,7 +5471,7 @@ char check_if_ignore_table(const char *table_name, char *table_type)
     mysql_free_result(res);
     DBUG_RETURN(result);                         /* assume table is ok */
   }
-  if (!(row[0]))
+  if (!(row[1]))
     strmake(table_type, "VIEW", NAME_LEN-1);
   else
   {
@@ -5579,7 +5481,7 @@ char check_if_ignore_table(const char *table_name, char *table_type)
       these types, but we do want to use delayed inserts in the dump if
       the table type is _NOT_ one of these types
     */
-    strmake(table_type, row[0], NAME_LEN-1);
+    strmake(table_type, row[1], NAME_LEN-1);
     if (opt_delayed)
     {
       if (strcmp(table_type,"MyISAM") &&
@@ -5927,8 +5829,7 @@ static my_bool get_view_structure(char *table, char* db)
     dynstr_free(&ds_view);
   }
 
-  if (switch_character_set_results(mysql, default_charset))
-    DBUG_RETURN(1);
+  switch_character_set_results(mysql, default_charset);
 
   /* If a separate .sql file was opened, close it now */
   if (sql_file != md_result_file)

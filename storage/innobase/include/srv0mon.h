@@ -2,7 +2,7 @@
 
 Copyright (c) 2010, 2013, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2012, Facebook Inc.
-Copyright (c) 2013, 2016, MariaDB Corporation.
+Copyright (c) 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the
@@ -164,12 +164,7 @@ enum monitor_id_t {
 	MONITOR_OVLD_BUF_POOL_PAGES_FREE,
 	MONITOR_OVLD_PAGE_CREATED,
 	MONITOR_OVLD_PAGES_WRITTEN,
-	MONITOR_OVLD_INDEX_PAGES_WRITTEN,
-	MONITOR_OVLD_NON_INDEX_PAGES_WRITTEN,
 	MONITOR_OVLD_PAGES_READ,
-	MONITOR_OVLD_PAGES0_READ,
-	MONITOR_OVLD_INDEX_SEC_REC_CLUSTER_READS,
-	MONITOR_OVLD_INDEX_SEC_REC_CLUSTER_READS_AVOIDED,
 	MONITOR_OVLD_BYTE_READ,
 	MONITOR_OVLD_BYTE_WRITTEN,
 	MONITOR_FLUSH_BATCH_SCANNED,
@@ -200,12 +195,9 @@ enum monitor_id_t {
 	MONITOR_LRU_BATCH_SCANNED,
 	MONITOR_LRU_BATCH_SCANNED_NUM_CALL,
 	MONITOR_LRU_BATCH_SCANNED_PER_CALL,
-	MONITOR_LRU_BATCH_FLUSH_TOTAL_PAGE,
-	MONITOR_LRU_BATCH_FLUSH_COUNT,
-	MONITOR_LRU_BATCH_FLUSH_PAGES,
-	MONITOR_LRU_BATCH_EVICT_TOTAL_PAGE,
-	MONITOR_LRU_BATCH_EVICT_COUNT,
-	MONITOR_LRU_BATCH_EVICT_PAGES,
+	MONITOR_LRU_BATCH_TOTAL_PAGE,
+	MONITOR_LRU_BATCH_COUNT,
+	MONITOR_LRU_BATCH_PAGES,
 	MONITOR_LRU_SINGLE_FLUSH_SCANNED,
 	MONITOR_LRU_SINGLE_FLUSH_SCANNED_NUM_CALL,
 	MONITOR_LRU_SINGLE_FLUSH_SCANNED_PER_CALL,
@@ -313,24 +305,6 @@ enum monitor_id_t {
 	MONITOR_PAGE_DECOMPRESS,
 	MONITOR_PAD_INCREMENTS,
 	MONITOR_PAD_DECREMENTS,
-	/* New monitor variables for page compression */
-	MONITOR_OVLD_PAGE_COMPRESS_SAVED,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT512,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT1024,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT2048,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT4096,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT8192,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT16384,
-	MONITOR_OVLD_PAGE_COMPRESS_TRIM_SECT32768,
-	MONITOR_OVLD_PAGES_PAGE_COMPRESSED,
-	MONITOR_OVLD_PAGE_COMPRESSED_TRIM_OP,
-	MONITOR_OVLD_PAGE_COMPRESSED_TRIM_OP_SAVED,
-	MONITOR_OVLD_PAGES_PAGE_DECOMPRESSED,
-	MONITOR_OVLD_PAGES_PAGE_COMPRESSION_ERROR,
-
-	/* New monitor variables for page encryption */
-	MONITOR_OVLD_PAGES_ENCRYPTED,
-	MONITOR_OVLD_PAGES_DECRYPTED,
 
 	/* Index related counters */
 	MONITOR_MODULE_INDEX,
@@ -379,8 +353,6 @@ enum monitor_id_t {
 	MONITOR_SRV_MEM_VALIDATE_MICROSECOND,
 	MONITOR_SRV_PURGE_MICROSECOND,
 	MONITOR_SRV_DICT_LRU_MICROSECOND,
-	MONITOR_SRV_DICT_LRU_EVICT_COUNT_ACTIVE,
-	MONITOR_SRV_DICT_LRU_EVICT_COUNT_IDLE,
 	MONITOR_SRV_CHECKPOINT_MICROSECOND,
 	MONITOR_OVLD_SRV_DBLWR_WRITES,
 	MONITOR_OVLD_SRV_DBLWR_PAGES_WRITTEN,
@@ -570,22 +542,30 @@ on the counters */
 
 /** Increment a monitor counter under mutex protection.
 Use MONITOR_INC if appropriate mutex protection already exists.
+@param mutex	mutex to acquire and release
 @param monitor	monitor to be incremented by 1
-@param mutex	mutex to acquire and relese */
-# define MONITOR_MUTEX_INC(mutex, monitor)				\
+@param enabled	whether the monitor is enabled */
+#define MONITOR_MUTEX_INC_LOW(mutex, monitor, enabled)			\
 	ut_ad(!mutex_own(mutex));					\
-	if (MONITOR_IS_ON(monitor)) {					\
+	if (enabled) {							\
 		mutex_enter(mutex);					\
 		if (++MONITOR_VALUE(monitor) > MONITOR_MAX_VALUE(monitor)) { \
 			MONITOR_MAX_VALUE(monitor) = MONITOR_VALUE(monitor); \
 		}							\
 		mutex_exit(mutex);					\
 	}
+/** Increment a monitor counter under mutex protection.
+Use MONITOR_INC if appropriate mutex protection already exists.
+@param mutex	mutex to acquire and release
+@param monitor	monitor to be incremented by 1 */
+#define MONITOR_MUTEX_INC(mutex, monitor)				\
+	MONITOR_MUTEX_INC_LOW(mutex, monitor, MONITOR_IS_ON(monitor))
 /** Decrement a monitor counter under mutex protection.
 Use MONITOR_DEC if appropriate mutex protection already exists.
+@param mutex	mutex to acquire and release
 @param monitor	monitor to be decremented by 1
-@param mutex	mutex to acquire and relese */
-# define MONITOR_MUTEX_DEC(mutex, monitor)				\
+@param enabled	whether the monitor is enabled */
+#define MONITOR_MUTEX_DEC_LOW(mutex, monitor, enabled)			\
 	ut_ad(!mutex_own(mutex));					\
 	if (MONITOR_IS_ON(monitor)) {					\
 		mutex_enter(mutex);					\
@@ -594,13 +574,20 @@ Use MONITOR_DEC if appropriate mutex protection already exists.
 		}							\
 		mutex_exit(mutex);					\
 	}
+/** Decrement a monitor counter under mutex protection.
+Use MONITOR_DEC if appropriate mutex protection already exists.
+@param mutex	mutex to acquire and release
+@param monitor	monitor to be decremented by 1 */
+#define MONITOR_MUTEX_DEC(mutex, monitor)				\
+	MONITOR_MUTEX_DEC_LOW(mutex, monitor, MONITOR_IS_ON(monitor))
 
 #if defined HAVE_ATOMIC_BUILTINS_64
 /** Atomically increment a monitor counter.
 Use MONITOR_INC if appropriate mutex protection exists.
-@param monitor	monitor to be incremented by 1 */
-# define MONITOR_ATOMIC_INC(monitor)					\
-	if (MONITOR_IS_ON(monitor)) {					\
+@param monitor	monitor to be incremented by 1
+@param enabled	whether the monitor is enabled */
+# define MONITOR_ATOMIC_INC_LOW(monitor, enabled)			\
+	if (enabled) {					\
 		ib_uint64_t	value;					\
 		value  = os_atomic_increment_uint64(			\
 			(ib_uint64_t*) &MONITOR_VALUE(monitor),	 1);	\
@@ -613,9 +600,10 @@ Use MONITOR_INC if appropriate mutex protection exists.
 
 /** Atomically decrement a monitor counter.
 Use MONITOR_DEC if appropriate mutex protection exists.
-@param monitor	monitor to be decremented by 1 */
-# define MONITOR_ATOMIC_DEC(monitor)					\
-	if (MONITOR_IS_ON(monitor)) {					\
+@param monitor	monitor to be decremented by 1
+@param enabled	whether the monitor is enabled */
+# define MONITOR_ATOMIC_DEC_LOW(monitor, enabled)			\
+	if (enabled) {							\
 		ib_uint64_t	value;					\
 		value = os_atomic_decrement_uint64(			\
 			(ib_uint64_t*) &MONITOR_VALUE(monitor), 1);	\
@@ -646,13 +634,28 @@ srv_mon_free(void);
 
 /** Atomically increment a monitor counter.
 Use MONITOR_INC if appropriate mutex protection exists.
-@param monitor	monitor to be incremented by 1 */
-# define MONITOR_ATOMIC_INC(monitor) MONITOR_MUTEX_INC(&monitor_mutex, monitor)
+@param monitor	monitor to be incremented by 1
+@param enabled	whether the monitor is enabled */
+# define MONITOR_ATOMIC_INC_LOW(monitor, enabled)		\
+	MONITOR_MUTEX_INC_LOW(&monitor_mutex, monitor, enabled)
 /** Atomically decrement a monitor counter.
 Use MONITOR_DEC if appropriate mutex protection exists.
-@param monitor	monitor to be decremented by 1 */
-# define MONITOR_ATOMIC_DEC(monitor) MONITOR_MUTEX_DEC(&monitor_mutex, monitor)
+@param monitor	monitor to be decremented by 1
+@param enabled	whether the monitor is enabled */
+# define MONITOR_ATOMIC_DEC_LOW(monitor, enabled)		\
+	MONITOR_MUTEX_DEC_LOW(&monitor_mutex, monitor, enabled)
 #endif /* HAVE_ATOMIC_BUILTINS_64 */
+
+/** Atomically increment a monitor counter if it is enabled.
+Use MONITOR_INC if appropriate mutex protection exists.
+@param monitor	monitor to be incremented by 1 */
+#define MONITOR_ATOMIC_INC(monitor)				\
+	MONITOR_ATOMIC_INC_LOW(monitor, MONITOR_IS_ON(monitor))
+/** Atomically decrement a monitor counter if it is enabled.
+Use MONITOR_DEC if appropriate mutex protection exists.
+@param monitor	monitor to be decremented by 1 */
+#define MONITOR_ATOMIC_DEC(monitor)				\
+	MONITOR_ATOMIC_DEC_LOW(monitor, MONITOR_IS_ON(monitor))
 
 #define	MONITOR_DEC(monitor)						\
 	if (MONITOR_IS_ON(monitor)) {					\

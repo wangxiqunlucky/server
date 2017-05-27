@@ -1,6 +1,5 @@
 #
 # This is a load generator to call from rpl_parallel and rpl_sequential tests
---source include/have_tokudb.inc
 
 #
 #

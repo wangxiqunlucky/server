@@ -1,4 +1,5 @@
 /* Copyright (c) 2008, 2015, Oracle and/or its affiliates. All rights reserved.
+   Copyright (c) 2017, MariaDB Corporation.
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,7 +25,6 @@
 #include "sql_string.h"
 #include "sql_class.h"
 #include "sql_lex.h"
-#include "sp_pcontext.h"
 #include "sql_digest.h"
 #include "sql_digest_stream.h"
 
@@ -163,7 +163,7 @@ inline void store_token_identifier(sql_digest_storage* digest_storage,
 
 void compute_digest_md5(const sql_digest_storage *digest_storage, unsigned char *md5)
 {
-  compute_md5_hash(md5,
+  compute_md5_hash((char *) md5,
                    (const char *) digest_storage->m_token_array,
                    digest_storage->m_byte_count);
 }
@@ -454,7 +454,8 @@ sql_digest_state* digest_add_token(sql_digest_state *state,
         }
       } while (found_unary);
     }
-    /* fall through, for case NULL_SYM below */
+    /* for case NULL_SYM below */
+    /* fall through */
     case LEX_HOSTNAME:
     case TEXT_STRING:
     case NCHAR_STRING:

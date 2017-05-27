@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "ma_fulltext.h"
 #include "ma_rt_index.h"
@@ -1505,7 +1505,7 @@ my_bool _ma_log_delete(MARIA_PAGE *ma_page, const uchar *key_pos,
 
   /* Store keypage_flag */
   *log_pos++= KEY_OP_SET_PAGEFLAG;
-  *log_pos++= _ma_get_keypage_flag(info->s, ma_page->buff);
+  *log_pos++= ma_page->buff[KEYPAGE_TRANSFLAG_OFFSET];
 
   log_pos[0]= KEY_OP_OFFSET;
   int2store(log_pos+1, offset);

@@ -36,11 +36,9 @@ C_MODE_START
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
-#if defined(HAVE_POLL_H)
-#include <poll.h>
-#elif defined(HAVE_SYS_POLL_H)
+#ifdef HAVE_POLL
 #include <sys/poll.h>
-#endif /* defined(HAVE_POLL_H) */
+#endif
 #ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
 #endif

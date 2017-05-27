@@ -173,6 +173,7 @@ public:
 	// Methods
 	virtual void ReadColumn(PGLOBAL g);
 	virtual void WriteColumn(PGLOBAL g);
+	//        void Printf(PGLOBAL g, FILE *, uint);
 
 protected:
 	// Members

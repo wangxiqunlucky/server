@@ -13,12 +13,10 @@
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
 
-if(NOT GRN_EMBED)
-  if(GRN_WITH_MRUBY)
-    set(GRN_RELATIVE_SHARDING_PLUGINS_DIR "${GRN_RELATIVE_PLUGINS_DIR}/sharding")
+if(GRN_WITH_MRUBY)
+  set(GRN_RELATIVE_SHARDING_PLUGINS_DIR "${GRN_RELATIVE_PLUGINS_DIR}/sharding")
 
-    read_file_list(${CMAKE_CURRENT_SOURCE_DIR}/sources.am SHARDING_SCRIPTS)
-    install(FILES ${SHARDING_SCRIPTS}
-      DESTINATION "${GRN_RELATIVE_SHARDING_PLUGINS_DIR}")
-  endif()
+  read_file_list(${CMAKE_CURRENT_SOURCE_DIR}/sources.am SHARDING_SCRIPTS)
+  install(FILES ${SHARDING_SCRIPTS}
+    DESTINATION "${GRN_RELATIVE_SHARDING_PLUGINS_DIR}")
 endif()

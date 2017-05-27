@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Describe, check and repair of MARIA tables */
 
@@ -1583,7 +1583,7 @@ static int check_page_layout(HA_CHECK *param, MARIA_HA *info,
 
   block_size= info->s->block_size;
   empty= 0;
-  last_row_end= PAGE_HEADER_SIZE(info->s);
+  last_row_end= PAGE_HEADER_SIZE;
   *real_rows_found= 0;
 
   /* Check free directory list */
@@ -1862,6 +1862,8 @@ static int check_block_record(HA_CHECK *param, MARIA_HA *info, int extend,
          page_type, bitmap_pattern;
     uint bitmap_for_page;
 
+    LINT_INIT(empty_space);
+
     if (_ma_killed_ptr(param))
     {
       _ma_scan_end_block_record(info);
@@ -1934,7 +1936,7 @@ static int check_block_record(HA_CHECK *param, MARIA_HA *info, int extend,
       row_count= page_buff[DIR_COUNT_OFFSET];
       empty_space= uint2korr(page_buff + EMPTY_SPACE_OFFSET);
       param->used+= block_size - empty_space;
-      param->link_used+= (PAGE_HEADER_SIZE(info->s) + PAGE_SUFFIX_SIZE +
+      param->link_used+= (PAGE_HEADER_SIZE + PAGE_SUFFIX_SIZE +
                           row_count * DIR_ENTRY_SIZE);
       if (empty_space < share->bitmap.sizes[3])
         param->lost+= empty_space;
@@ -1948,7 +1950,7 @@ static int check_block_record(HA_CHECK *param, MARIA_HA *info, int extend,
       row_count= page_buff[DIR_COUNT_OFFSET];
       empty_space= uint2korr(page_buff + EMPTY_SPACE_OFFSET);
       param->used+= block_size - empty_space;
-      param->link_used+= (PAGE_HEADER_SIZE(info->s) + PAGE_SUFFIX_SIZE +
+      param->link_used+= (PAGE_HEADER_SIZE + PAGE_SUFFIX_SIZE +
                           row_count * DIR_ENTRY_SIZE);
       if (empty_space < share->bitmap.sizes[6])
         param->lost+= empty_space;
@@ -1962,7 +1964,7 @@ static int check_block_record(HA_CHECK *param, MARIA_HA *info, int extend,
       full_page_count++;
       full_dir= 0;
       empty_space= block_size;                  /* for error reporting */
-      param->link_used+= FULL_PAGE_HEADER_SIZE(info->s);
+      param->link_used+= (LSN_SIZE + PAGE_TYPE_SIZE);
       param->used+= block_size;
       break;
     }
@@ -3187,23 +3189,17 @@ err2:
 
 
 /**
-  @brief write a page directly to index file
+  @brief put CRC on the page
 
+  @param buff            reference on the page buffer.
+  @param pos             position of the page in the file.
+  @param length          length of the page
 */
 
-static int write_page(MARIA_SHARE *share, File file,
-                      uchar *buff, uint block_size,
-                      my_off_t pos, int myf_rw)
+static void put_crc(uchar *buff, my_off_t pos, MARIA_SHARE *share)
 {
-  int res;
-  PAGECACHE_IO_HOOK_ARGS args;
-  args.page= buff;
-  args.pageno= (pgcache_page_no_t) (pos / share->block_size);
-  args.data= (uchar*) share;
-  (* share->kfile.pre_write_hook)(&args);
-  res= my_pwrite(file, args.page, block_size, pos, myf_rw);
-  (* share->kfile.post_write_hook)(res, &args);
-  return res;
+  maria_page_crc_set_index(buff, (pgcache_page_no_t) (pos / share->block_size),
+                           (uchar*) share);
 }
 
 
@@ -3292,8 +3288,9 @@ static int sort_one_index(HA_CHECK *param, MARIA_HA *info,
   /* Fill block with zero and write it to the new index file */
   length= page.size;
   bzero(buff+length,keyinfo->block_length-length);
-  if (write_page(share, new_file, buff, keyinfo->block_length,
-                 new_page_pos, MYF(MY_NABP | MY_WAIT_IF_FULL)))
+  put_crc(buff, new_page_pos, share);
+  if (my_pwrite(new_file, buff,(uint) keyinfo->block_length,
+		new_page_pos,MYF(MY_NABP | MY_WAIT_IF_FULL)))
   {
     _ma_check_print_error(param,"Can't write indexblock, error: %d",my_errno);
     goto err;
@@ -3484,8 +3481,7 @@ static my_bool maria_zerofill_data(HA_CHECK *param, MARIA_HA *info,
       {
         my_bool is_head_page= (page_type == HEAD_PAGE);
         dir= dir_entry_pos(buff, block_size, max_entry - 1);
-        _ma_compact_block_page(share,
-                               buff, max_entry -1, 0,
+        _ma_compact_block_page(buff, block_size, max_entry -1, 0,
                                is_head_page ? ~(TrID) 0 : 0,
                                is_head_page ?
                                share->base.min_block_length : 0);
@@ -4019,9 +4015,8 @@ int maria_repair_by_sort(HA_CHECK *param, register MARIA_HA *info,
       share->state.state.data_file_length=sort_param.max_pos;
 
     param->read_cache.file= info->dfile.file;	/* re-init read cache */
-    if (share->data_file_type != BLOCK_RECORD)
-      reinit_io_cache(&param->read_cache, READ_CACHE,
-                      share->pack.header_length, 1, 1);
+    reinit_io_cache(&param->read_cache,READ_CACHE,share->pack.header_length,
+                    1,1);
   }
 
   if (param->testflag & T_WRITE_LOOP)
@@ -4220,6 +4215,7 @@ int maria_repair_parallel(HA_CHECK *param, register MARIA_HA *info,
     printf("Data records: %s\n", llstr(start_records, llbuff));
   }
 
+  bzero(&new_data_cache, sizeof(new_data_cache));
   if (initialize_variables_for_repair(param, &sort_info, &tmp_sort_param, info,
                                       rep_quick, &backup_share))
     goto err;
@@ -4266,14 +4262,20 @@ int maria_repair_parallel(HA_CHECK *param, register MARIA_HA *info,
 
   if (!(sort_info.key_block=
 	alloc_key_blocks(param, (uint) param->sort_key_blocks,
-			 share->base.max_key_block_length)))
-    goto err;
-
-  if (init_io_cache(&param->read_cache, info->dfile.file,
+			 share->base.max_key_block_length)) ||
+      init_io_cache(&param->read_cache, info->dfile.file,
                     (uint) param->read_buffer_length,
-                    READ_CACHE, share->pack.header_length, 1, MYF(MY_WME)))
+                    READ_CACHE, share->pack.header_length, 1, MYF(MY_WME)) ||
+      (!rep_quick &&
+       (init_io_cache(&info->rec_cache, info->dfile.file,
+                      (uint) param->write_buffer_length,
+                      WRITE_CACHE, new_header_length, 1,
+                      MYF(MY_WME | MY_WAIT_IF_FULL) & param->myf_rw) ||
+        init_io_cache(&new_data_cache, -1,
+                      (uint) param->write_buffer_length,
+                      READ_CACHE, new_header_length, 1,
+                      MYF(MY_WME | MY_DONT_CHECK_FILESIZE)))))
     goto err;
-
   sort_info.key_block_end=sort_info.key_block+param->sort_key_blocks;
   info->opt_flag|=WRITE_CACHE_USED;
   info->rec_cache.file= info->dfile.file;         /* for sort_delete_record */
@@ -4300,19 +4302,7 @@ int maria_repair_parallel(HA_CHECK *param, register MARIA_HA *info,
     if (param->testflag & T_UNPACK)
       restore_data_file_type(share);
     share->state.dellink= HA_OFFSET_ERROR;
-
-    if (init_io_cache(&new_data_cache, -1,
-                        (uint) param->write_buffer_length,
-                        READ_CACHE, new_header_length, 1,
-                        MYF(MY_WME | MY_DONT_CHECK_FILESIZE)))
-      goto err;
-
-    if (init_io_cache(&info->rec_cache, new_file,
-                        (uint) param->write_buffer_length,
-                        WRITE_CACHE, new_header_length, 1,
-                        MYF(MY_WME | MY_WAIT_IF_FULL) & param->myf_rw))
-      goto err;
-
+    info->rec_cache.file=new_file;
   }
 
   /* Optionally drop indexes and optionally modify the key_map. */
@@ -5800,8 +5790,9 @@ static int sort_insert_key(MARIA_SORT_PARAM *sort_param,
   }
   else
   {
-    if (write_page(share, share->kfile.file, anc_buff,
-                   keyinfo->block_length, filepos, param->myf_rw))
+    put_crc(anc_buff, filepos, share);
+    if (my_pwrite(share->kfile.file, anc_buff,
+                  (uint) keyinfo->block_length, filepos, param->myf_rw))
       DBUG_RETURN(1);
   }
   DBUG_DUMP("buff", anc_buff, _ma_get_page_used(share, anc_buff));
@@ -5929,8 +5920,9 @@ int _ma_flush_pending_blocks(MARIA_SORT_PARAM *sort_param)
     }
     else
     {
-      if (write_page(info->s, info->s->kfile.file, key_block->buff,
-                     keyinfo->block_length, filepos, myf_rw))
+      put_crc(key_block->buff, filepos, info->s);
+      if (my_pwrite(info->s->kfile.file, key_block->buff,
+                    (uint) keyinfo->block_length,filepos, myf_rw))
         goto err;
     }
     DBUG_DUMP("buff",key_block->buff,length);
@@ -6103,7 +6095,7 @@ int maria_recreate_table(HA_CHECK *param, MARIA_HA **org_info, char *filename)
   create_info.data_file_length=file_length;
   create_info.auto_increment=share.state.auto_increment;
   create_info.language = (param->language ? param->language :
-			  share.base.language);
+			  share.state.header.language);
   create_info.key_file_length=  status_info.key_file_length;
   create_info.org_data_file_type= ((enum data_file_type)
                                    share.state.header.org_data_file_type);
@@ -6635,6 +6627,17 @@ static void copy_data_file_state(MARIA_STATE_INFO *to,
 }
 
 
+/* Return 1 if block is full of zero's */
+
+static my_bool zero_filled_block(uchar *tmp, uint length)
+{
+  while (length--)
+    if (*(tmp++) != 0)
+      return 0;
+  return 1;
+}
+
+
 /*
   Read 'safely' next record while scanning table.
 
@@ -6696,8 +6699,7 @@ static int _ma_safe_scan_block_record(MARIA_SORT_INFO *sort_info,
       info->scan.dir-= DIR_ENTRY_SIZE;          /* Point to previous row */
 
       if (end_of_data > info->scan.dir_end ||
-          offset < PAGE_HEADER_SIZE(info->s) ||
-          length < share->base.min_block_length)
+          offset < PAGE_HEADER_SIZE || length < share->base.min_block_length)
       {
         _ma_check_print_info(sort_info->param,
                              "Wrong directory entry %3u at page %s",
@@ -6742,7 +6744,8 @@ read_next_page:
             sometimes be found at end of a bitmap when we wrote a big
             record last that was moved to the next bitmap.
           */
-          if (_ma_check_bitmap_data(info, UNALLOCATED_PAGE, 0, 
+          if (!zero_filled_block(info->scan.page_buff, share->block_size) ||
+              _ma_check_bitmap_data(info, UNALLOCATED_PAGE, 0, 
                                     _ma_bitmap_get_page_bits(info,
                                                              &share->bitmap,
                                                              page)))

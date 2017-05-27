@@ -1,6 +1,6 @@
 /*****************************************************************************
 
-Copyright (c) 1996, 2016, Oracle and/or its affiliates. All Rights Reserved.
+Copyright (c) 1996, 2017, Oracle and/or its affiliates. All Rights Reserved.
 Copyright (c) 2017, MariaDB Corporation. All Rights Reserved.
 
 This program is free software; you can redistribute it and/or modify it under
@@ -275,37 +275,18 @@ trx_purge_add_update_undo_to_history(
 	}
 }
 
-/** Remove undo log header from the history list.
-@param[in,out]	rseg_hdr	rollback segment header
-@param[in]	log_hdr		undo log segment header
-@param[in,out]	mtr		mini transaction. */
-static
-void
-trx_purge_remove_log_hdr(
-	trx_rsegf_t*	rseg_hdr,
-	trx_ulogf_t*	log_hdr,
-	mtr_t*		mtr)
-{
-	flst_remove(rseg_hdr + TRX_RSEG_HISTORY,
-		    log_hdr + TRX_UNDO_HISTORY_NODE, mtr);
-#ifdef HAVE_ATOMIC_BUILTINS
-	os_atomic_decrement_ulint(&trx_sys->rseg_history_len, 1);
-#else
-	mutex_enter(&trx_sys->mutex);
-	--trx_sys->rseg_history_len;
-	mutex_exit(&trx_sys->mutex);
-#endif
-}
-
-/** Frees an undo log segment which is in the history list. Removes the
-undo log hdr from the history list.
-@param[in,out]	rseg		rollback segment
-@param[in]	hdr_addr	file address of log_hdr */
+/**********************************************************************//**
+Frees an undo log segment which is in the history list. Cuts the end of the
+history list at the youngest undo log in this segment. */
 static
 void
 trx_purge_free_segment(
-	trx_rseg_t*	rseg,
-	fil_addr_t	hdr_addr)
+/*===================*/
+	trx_rseg_t*	rseg,		/*!< in: rollback segment */
+	fil_addr_t	hdr_addr,	/*!< in: the file address of log_hdr */
+	ulint		n_removed_logs)	/*!< in: count of how many undo logs we
+					will cut off from the end of the
+					history list */
 {
 	mtr_t		mtr;
 	trx_rsegf_t*	rseg_hdr;
@@ -369,7 +350,16 @@ trx_purge_free_segment(
 	history list: otherwise, in case of a database crash, the segment
 	could become inaccessible garbage in the file space. */
 
-	trx_purge_remove_log_hdr(rseg_hdr, log_hdr, &mtr);
+	flst_cut_end(rseg_hdr + TRX_RSEG_HISTORY,
+		     log_hdr + TRX_UNDO_HISTORY_NODE, n_removed_logs, &mtr);
+
+#ifdef HAVE_ATOMIC_BUILTINS
+	os_atomic_decrement_ulint(&trx_sys->rseg_history_len, n_removed_logs);
+#else
+	mutex_enter(&trx_sys->mutex);
+	trx_sys->rseg_history_len -= n_removed_logs;
+	mutex_exit(&trx_sys->mutex);
+#endif /* HAVE_ATOMIC_BUILTINS */
 
 	do {
 
@@ -411,6 +401,7 @@ trx_purge_truncate_rseg_history(
 	page_t*		undo_page;
 	trx_ulogf_t*	log_hdr;
 	trx_usegf_t*	seg_hdr;
+	ulint		n_removed_logs	= 0;
 	mtr_t		mtr;
 	trx_id_t	undo_trx_no;
 
@@ -448,6 +439,19 @@ loop:
 				hdr_addr.boffset, limit->undo_no);
 		}
 
+#ifdef HAVE_ATOMIC_BUILTINS
+		os_atomic_decrement_ulint(
+			&trx_sys->rseg_history_len, n_removed_logs);
+#else
+		mutex_enter(&trx_sys->mutex);
+		trx_sys->rseg_history_len -= n_removed_logs;
+		mutex_exit(&trx_sys->mutex);
+#endif /* HAVE_ATOMIC_BUILTINS */
+
+		flst_truncate_end(rseg_hdr + TRX_RSEG_HISTORY,
+				  log_hdr + TRX_UNDO_HISTORY_NODE,
+				  n_removed_logs, &mtr);
+
 		mutex_exit(&(rseg->mutex));
 		mtr_commit(&mtr);
 
@@ -456,6 +460,7 @@ loop:
 
 	prev_hdr_addr = trx_purge_get_log_from_hist(
 		flst_get_prev_addr(log_hdr + TRX_UNDO_HISTORY_NODE, &mtr));
+	n_removed_logs++;
 
 	seg_hdr = undo_page + TRX_UNDO_SEG_HDR;
 
@@ -467,14 +472,10 @@ loop:
 		mutex_exit(&(rseg->mutex));
 		mtr_commit(&mtr);
 
-		/* calls the trx_purge_remove_log_hdr()
-		inside trx_purge_free_segment(). */
-		trx_purge_free_segment(rseg, hdr_addr);
+		trx_purge_free_segment(rseg, hdr_addr, n_removed_logs);
 
+		n_removed_logs = 0;
 	} else {
-		/* Remove the log hdr from the rseg history. */
-		trx_purge_remove_log_hdr(rseg_hdr, log_hdr, &mtr);
-
 		mutex_exit(&(rseg->mutex));
 		mtr_commit(&mtr);
 	}
@@ -685,7 +686,8 @@ trx_purge_get_rseg_with_min_trx_id(
 
 	/* We assume in purge of externally stored fields that space id is
 	in the range of UNDO tablespace space ids */
-	ut_a(purge_sys->rseg->space <= srv_undo_tablespaces_open);
+	ut_a(purge_sys->rseg->space == 0
+	     || srv_is_undo_tablespace(purge_sys->rseg->space));
 
 	zip_size = purge_sys->rseg->zip_size;
 

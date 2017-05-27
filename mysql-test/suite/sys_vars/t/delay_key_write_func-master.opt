@@ -1,2 +1,2 @@
---myisam-recover-options=BACKUP,FORCE
+--myisam-recover=BACKUP,FORCE
 

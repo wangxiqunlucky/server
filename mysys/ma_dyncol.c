@@ -2066,7 +2066,7 @@ static uchar *find_entry_named(DYN_HEADER *hdr, LEX_STRING *key)
 /**
   Write number in the buffer (backward direction - starts from the buffer end)
 
-  @return pointer on the number beginning
+  @return pointer on the number begining
 */
 
 static char *backwritenum(char *chr, uint numkey)
@@ -2136,7 +2136,7 @@ find_column(DYN_HEADER *hdr, uint numkey, LEX_STRING *strkey)
   hdr->length= hdr_interval_length(hdr, hdr->entry + hdr->entry_size);
   hdr->data= hdr->dtpool + hdr->offset;
   /*
-    Check that the found data is within the ranges. This can happen if
+    Check that the found data is withing the ranges. This can happen if
     we get data with wrong offsets.
   */
   if (hdr->length == DYNCOL_OFFSET_ERROR ||
@@ -2578,6 +2578,7 @@ find_place(DYN_HEADER *hdr, void *key, my_bool string_keys)
   mid= 1;
   while (start != end)
   {
+    uint val;
     mid= (start + end) / 2;
     hdr->entry= hdr->header + mid * hdr->entry_size;
     if (!string_keys)
@@ -3480,7 +3481,7 @@ dynamic_column_update_many_fmt(DYNAMIC_COLUMN *str,
 
       if (plan[i].val->type == DYN_COL_NULL)
       {
-        plan[i].act= PLAN_NOP;                  /* Mark entry to be skipped */
+        plan[i].act= PLAN_NOP;                  /* Mark entry to be skiped */
       }
       else
       {
@@ -3894,11 +3895,11 @@ mariadb_dyncol_val_str(DYNAMIC_STRING *str, DYNAMIC_COLUMN_VALUE *val,
       }
     case DYN_COL_DECIMAL:
       {
-        int tmp_len= sizeof(buff);
-        decimal2string(&val->x.decimal.value, buff, &tmp_len,
+        int len= sizeof(buff);
+        decimal2string(&val->x.decimal.value, buff, &len,
                        0, val->x.decimal.value.frac,
                        '0');
-        if (dynstr_append_mem(str, buff, tmp_len))
+        if (dynstr_append_mem(str, buff, len))
           return ER_DYNCOL_RESOURCE;
         break;
       }
@@ -4038,6 +4039,8 @@ mariadb_dyncol_val_double(double *dbl, DYNAMIC_COLUMN_VALUE *val)
         *dbl= strtod(str, &end);
         if (*end != '\0')
           rc= ER_DYNCOL_TRUNCATED;
+        free(str);
+        break;
       }
     case DYN_COL_DECIMAL:
       if (decimal2double(&val->x.decimal.value, dbl) != E_DEC_OK)
@@ -4129,7 +4132,7 @@ mariadb_dyncol_json_internal(DYNAMIC_COLUMN *str, DYNAMIC_STRING *json,
       hdr_interval_length(&header, header.entry + header.entry_size);
     header.data= header.dtpool + header.offset;
     /*
-      Check that the found data is within the ranges. This can happen if
+      Check that the found data is withing the ranges. This can happen if
       we get data with wrong offsets.
     */
     if (header.length == DYNCOL_OFFSET_ERROR ||
@@ -4269,7 +4272,7 @@ mariadb_dyncol_unpack(DYNAMIC_COLUMN *str,
       hdr_interval_length(&header, header.entry + header.entry_size);
     header.data= header.dtpool + header.offset;
     /*
-      Check that the found data is within the ranges. This can happen if
+      Check that the found data is withing the ranges. This can happen if
       we get data with wrong offsets.
     */
     if (header.length == DYNCOL_OFFSET_ERROR ||

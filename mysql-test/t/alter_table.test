@@ -1741,14 +1741,14 @@ DROP TABLE `tab1`;
 --echo #
 --echo # MDEV-11548 Reproducible server crash after the 2nd ALTER TABLE ADD FOREIGN KEY IF NOT EXISTS
 --echo #
-
+ 
 CREATE TABLE t1 (id INT UNSIGNED NOT NULL PRIMARY KEY);
 CREATE TABLE t2 (id1 INT UNSIGNED NOT NULL);
-
+ 
 ALTER TABLE t2
 ADD FOREIGN KEY IF NOT EXISTS (id1)
   REFERENCES t1 (id);
-
+   
 ALTER TABLE t2
 ADD FOREIGN KEY IF NOT EXISTS (id1)
 REFERENCES t1 (id);
@@ -1756,35 +1756,14 @@ REFERENCES t1 (id);
 DROP TABLE t2;
 DROP TABLE t1;
 
+
 --echo #
 --echo # MDEV-6390 CONVERT TO CHARACTER SET utf8 doesn't change DEFAULT CHARSET.
 --echo #
-
+ 
 CREATE TABLE t1 (id int(11) NOT NULL, a int(11) NOT NULL, b int(11))
   ENGINE=InnoDB DEFAULT CHARSET=latin1;
 SHOW CREATE TABLE t1;
 ALTER TABLE t1 CONVERT TO CHARACTER SET utf8;
-SHOW CREATE TABLE t1;
-DROP TABLE t1;
-
---echo #
---echo # Start of 10.1 tests
---echo #
-
---echo #
---echo # MDEV-7374 : Losing connection to MySQL while running ALTER TABLE
---echo #
-CREATE TABLE t1(i INT) ENGINE=INNODB;
-INSERT INTO t1 VALUES (1),(2),(3),(4),(5),(6),(7),(8);
-INSERT INTO t1 SELECT a.* FROM t1 a, t1 b, t1 c, t1 d, t1 e;
-ALTER TABLE t1 MODIFY i FLOAT;
-DROP TABLE t1;
-
---echo #
---echo # MDEV-7816 ALTER with DROP INDEX and ADD INDEX .. COMMENT='comment2' ignores the new comment
---echo #
-CREATE TABLE t1(a INT);
-CREATE INDEX i1 ON t1(a) COMMENT 'comment1';
-ALTER TABLE t1 DROP INDEX i1, ADD INDEX i1(a) COMMENT 'comment2';
 SHOW CREATE TABLE t1;
 DROP TABLE t1;

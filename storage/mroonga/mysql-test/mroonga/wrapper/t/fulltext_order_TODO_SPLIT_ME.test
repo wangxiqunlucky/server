@@ -12,7 +12,7 @@
 #
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 --source include/have_innodb.inc
 --source ../../include/mroonga/have_mroonga.inc
@@ -40,7 +40,11 @@ INSERT INTO ft VALUES(5,'eeeee','efghi');
 
 SELECT a, b, c FROM ft WHERE MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE);
 SELECT a, b, c FROM ft WHERE MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE) ORDER BY MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE);
+SELECT a, b, c FROM ft WHERE MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE) ORDER BY MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE);
 SELECT a, b, c FROM ft WHERE MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE);
+SELECT a, b, c, MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE), MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE) FROM ft WHERE MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE) ORDER BY MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE);
+SELECT a, b, c, MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE), MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE) FROM ft WHERE MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE);
+SELECT a, b, c, MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE), MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE) FROM ft ORDER BY MATCH(c) AGAINST('bbbbb' IN BOOLEAN MODE), MATCH(b) AGAINST('bbbbb' IN BOOLEAN MODE), a;
 
 DROP TABLE ft;
 

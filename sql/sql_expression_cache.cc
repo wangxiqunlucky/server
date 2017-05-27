@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <my_global.h>
 #include "sql_base.h"
@@ -43,7 +43,7 @@ ulong subquery_cache_miss, subquery_cache_hit;
 Expression_cache_tmptable::Expression_cache_tmptable(THD *thd,
                                                      List<Item> &dependants,
                                                      Item *value)
-  :cache_table(NULL), table_thd(thd), tracker(NULL), items(dependants), val(value),
+  :cache_table(NULL), table_thd(thd), items(dependants), val(value),
    hit(0), miss(0), inited (0)
 {
   DBUG_ENTER("Expression_cache_tmptable::Expression_cache_tmptable");
@@ -61,9 +61,6 @@ void Expression_cache_tmptable::disable_cache()
     cache_table->file->ha_index_end();
   free_tmp_table(table_thd, cache_table);
   cache_table= NULL;
-  update_tracker();
-  if (tracker)
-    tracker->cache= NULL;
 }
 
 
@@ -161,14 +158,12 @@ void Expression_cache_tmptable::init()
     goto error;
   }
 
-  if (!(cached_result= new (table_thd->mem_root)
-        Item_field(table_thd, cache_table->field[0])))
+  if (!(cached_result= new Item_field(cache_table->field[0])))
   {
     DBUG_PRINT("error", ("Creating Item_field failed"));
     goto error;
   }
 
-  update_tracker();
   DBUG_VOID_RETURN;
 
 error:
@@ -185,11 +180,6 @@ Expression_cache_tmptable::~Expression_cache_tmptable()
 
   if (cache_table)
     disable_cache();
-  else
-  {
-    update_tracker();
-    tracker= NULL;
-  }
 }
 
 
@@ -333,7 +323,3 @@ void Expression_cache_tmptable::print(String *str, enum_query_type query_type)
   }
   str->append('>');
 }
-
-
-const char *Expression_cache_tracker::state_str[3]=
-{"uninitialized", "disabled", "enabled"};

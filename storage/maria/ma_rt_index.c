@@ -12,7 +12,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "maria_def.h"
 #include "trnman.h"
@@ -523,14 +523,18 @@ static const uchar *maria_rtree_pick_key(const MARIA_KEY *key,
                                          const MARIA_PAGE *page)
 {
   double increase;
-  double UNINIT_VAR(best_incr);
+  double best_incr;
   double perimeter;
-  double UNINIT_VAR(best_perimeter);
+  double best_perimeter;
   uchar *best_key= NULL;
   const MARIA_HA *info= page->info;
 
   uchar *k= rt_PAGE_FIRST_KEY(info->s, page->buf, page->node);
   uchar *last= rt_PAGE_END(info, page);
+
+  LINT_INIT(best_perimeter);
+  LINT_INIT(best_key);
+  LINT_INIT(best_incr);
 
   for (; k < last; k= rt_PAGE_NEXT_KEY(k, key->data_length, nod_flag))
   {
@@ -559,10 +563,12 @@ static const uchar *maria_rtree_pick_key(const MARIA_KEY *key,
   double increase;
   double best_incr= DBL_MAX;
   double area;
-  double UNINIT_VAR(best_area);
+  double best_area;
   const uchar *best_key= NULL;
   const uchar *k= rt_PAGE_FIRST_KEY(share, page->buff, page->node);
   const uchar *last= rt_PAGE_END(page);
+
+  LINT_INIT(best_area);
 
   for (; k < last;
        k= rt_PAGE_NEXT_KEY(share, k, key->data_length, page->node))

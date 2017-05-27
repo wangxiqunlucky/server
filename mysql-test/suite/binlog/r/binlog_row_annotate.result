@@ -80,8 +80,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -99,7 +98,7 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -107,7 +106,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -115,7 +114,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test3
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -123,7 +122,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -131,7 +130,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -144,8 +143,8 @@ CREATE DATABASE test3
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -168,10 +167,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test2.t2 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -194,10 +193,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test3.t3 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test3`.`t3`
 ### SET
@@ -220,15 +219,15 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE test1.t1, test2.t2
 #Q> FROM test1.t1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE test1.t1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test1`.`t1`
@@ -261,10 +260,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test2.v2 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -287,12 +286,12 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE xtest1.xt1, test2.t2
 #Q> FROM xtest1.xt1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE xtest1.xt1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test2`.`t2`
 ### WHERE
@@ -333,8 +332,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -352,15 +350,15 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -368,11 +366,11 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 # at #
@@ -381,8 +379,8 @@ CREATE DATABASE test1
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -431,14 +429,14 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE test1.t1, test2.t2
 #Q> FROM test1.t1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE test1.t1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 ### DELETE FROM `test1`.`t1`
 ### WHERE
@@ -505,8 +503,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -524,7 +521,7 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -532,7 +529,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -540,7 +537,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test3
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -548,7 +545,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -556,7 +553,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -569,8 +566,8 @@ CREATE DATABASE test3
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -593,8 +590,8 @@ BEGIN
 /*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -617,8 +614,8 @@ BEGIN
 /*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test3`.`t3`
 ### SET
@@ -641,11 +638,11 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test1`.`t1`
@@ -678,8 +675,8 @@ BEGIN
 /*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -702,8 +699,8 @@ BEGIN
 /*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test2`.`t2`
 ### WHERE
@@ -748,8 +745,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -767,7 +763,7 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -775,7 +771,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -783,7 +779,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test3
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -791,7 +787,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -799,7 +795,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -812,8 +808,8 @@ CREATE DATABASE test3
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -836,10 +832,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test2.t2 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -862,10 +858,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test3.t3 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test3`.`t3`
 ### SET
@@ -888,15 +884,15 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE test1.t1, test2.t2
 #Q> FROM test1.t1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE test1.t1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test1`.`t1`
@@ -929,10 +925,10 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> INSERT INTO test2.v2 VALUES (1), (2), (3)
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -955,12 +951,12 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE xtest1.xt1, test2.t2
 #Q> FROM xtest1.xt1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE xtest1.xt1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test2`.`t2`
 ### WHERE
@@ -1001,8 +997,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -1020,15 +1015,15 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1036,11 +1031,11 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 # at #
@@ -1049,8 +1044,8 @@ CREATE DATABASE test1
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -1099,14 +1094,14 @@ BEGIN
 /*!*/;
 # at #
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Annotate_rows:
 #Q> DELETE test1.t1, test2.t2
 #Q> FROM test1.t1 INNER JOIN test2.t2 INNER JOIN test3.t3
 #Q> WHERE test1.t1.a=test2.t2.a AND test2.t2.a=test3.t3
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 ### DELETE FROM `test1`.`t1`
 ### WHERE
@@ -1173,8 +1168,7 @@ ROLLBACK/*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Binlog checkpoint master-bin.000001
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1 ddl
-/*!100101 SET @@session.skip_parallel_replication=0*//*!*/;
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-1
 /*!100001 SET @@session.gtid_domain_id=0*//*!*/;
 /*!100001 SET @@session.server_id=1*//*!*/;
 /*!100001 SET @@session.gtid_seq_no=1*//*!*/;
@@ -1192,7 +1186,7 @@ SET @@session.collation_database=DEFAULT/*!*/;
 DROP DATABASE IF EXISTS test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-2
 /*!100001 SET @@session.gtid_seq_no=2*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1200,7 +1194,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-3
 /*!100001 SET @@session.gtid_seq_no=3*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1208,7 +1202,7 @@ SET TIMESTAMP=1000000000/*!*/;
 DROP DATABASE IF EXISTS test3
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-4
 /*!100001 SET @@session.gtid_seq_no=4*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1216,7 +1210,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test1
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-5
 /*!100001 SET @@session.gtid_seq_no=5*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1224,7 +1218,7 @@ SET TIMESTAMP=1000000000/*!*/;
 CREATE DATABASE test2
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6 ddl
+#010909  4:46:40 server id #  end_log_pos # 	GTID 0-1-6
 /*!100001 SET @@session.gtid_seq_no=6*//*!*/;
 # at #
 #010909  4:46:40 server id #  end_log_pos # 	Query	thread_id=#	exec_time=#	error_code=0
@@ -1237,8 +1231,8 @@ CREATE DATABASE test3
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test1`.`t1`
 ### SET
@@ -1260,8 +1254,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -1283,8 +1277,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test3`.`t3` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test3`.`t3`
 ### SET
@@ -1306,11 +1300,11 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
+# at #
+# at #
+# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test1`.`t1` mapped to number #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
-# at #
-# at #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test1`.`t1`
@@ -1342,8 +1336,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Write_rows: table id # flags: STMT_END_F
 ### INSERT INTO `test2`.`t2`
 ### SET
@@ -1365,8 +1359,8 @@ COMMIT
 BEGIN
 /*!*/;
 # at #
-#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 # at #
+#010909  4:46:40 server id #  end_log_pos # 	Table_map: `test2`.`t2` mapped to number #
 #010909  4:46:40 server id #  end_log_pos # 	Delete_rows: table id # flags: STMT_END_F
 ### DELETE FROM `test2`.`t2`
 ### WHERE

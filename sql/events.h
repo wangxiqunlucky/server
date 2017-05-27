@@ -105,7 +105,7 @@ public:
   destroy_mutexes();
 
   static bool
-  create_event(THD *thd, Event_parse_data *parse_data);
+  create_event(THD *thd, Event_parse_data *parse_data, bool if_exists);
 
   static bool
   update_event(THD *thd, Event_parse_data *parse_data,

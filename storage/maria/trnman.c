@@ -11,7 +11,7 @@
 
    You should have received a copy of the GNU General Public License
    along with this program; if not, write to the Free Software
-   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02111-1301 USA */
+   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include <my_global.h>
@@ -60,6 +60,7 @@ static LF_HASH trid_to_trn;
 static TRN **short_trid_to_active_trn;
 
 /* locks for short_trid_to_active_trn and pool */
+static my_atomic_rwlock_t LOCK_short_trid_to_trn, LOCK_pool;
 static my_bool default_trnman_end_trans_hook(TRN *, my_bool, my_bool);
 static void trnman_free_trn(TRN *);
 
@@ -190,6 +191,8 @@ int trnman_init(TrID initial_trid)
                0, 0, trn_get_hash_key, 0);
   DBUG_PRINT("info", ("mysql_mutex_init LOCK_trn_list"));
   mysql_mutex_init(key_LOCK_trn_list, &LOCK_trn_list, MY_MUTEX_INIT_FAST);
+  my_atomic_rwlock_init(&LOCK_short_trid_to_trn);
+  my_atomic_rwlock_init(&LOCK_pool);
 
   DBUG_RETURN(0);
 }
@@ -223,6 +226,8 @@ void trnman_destroy()
   lf_hash_destroy(&trid_to_trn);
   DBUG_PRINT("info", ("mysql_mutex_destroy LOCK_trn_list"));
   mysql_mutex_destroy(&LOCK_trn_list);
+  my_atomic_rwlock_destroy(&LOCK_short_trid_to_trn);
+  my_atomic_rwlock_destroy(&LOCK_pool);
   my_free(short_trid_to_active_trn+1);
   short_trid_to_active_trn= NULL;
 
@@ -252,6 +257,7 @@ static uint get_short_trid(TRN *trn)
 
   for ( ; !res ; i= 1)
   {
+    my_atomic_rwlock_wrlock(&LOCK_short_trid_to_trn);
     for ( ; i <= SHORT_TRID_MAX; i++) /* the range is [1..SHORT_TRID_MAX] */
     {
       void *tmp= NULL;
@@ -262,6 +268,7 @@ static uint get_short_trid(TRN *trn)
         break;
       }
     }
+    my_atomic_rwlock_wrunlock(&LOCK_short_trid_to_trn);
   }
   return res;
 }
@@ -299,9 +306,11 @@ TRN *trnman_new_trn(WT_THD *wt)
     Popping an unused TRN from the pool
     (ABA isn't possible, we're behind a mutex
   */
+  my_atomic_rwlock_wrlock(&LOCK_pool);
   while (tmp.trn && !my_atomic_casptr((void **)(char*) &pool, &tmp.v,
                                       (void *)tmp.trn->next))
     /* no-op */;
+  my_atomic_rwlock_wrunlock(&LOCK_pool);
 
   /* Nothing in the pool ? Allocate a new one */
   if (!(trn= tmp.trn))
@@ -484,7 +493,9 @@ my_bool trnman_end_trn(TRN *trn, my_bool commit)
     note that we don't own trn anymore, it may be in a shared list now.
     Thus, we cannot dereference it, and must use cached_short_id below.
   */
+  my_atomic_rwlock_rdlock(&LOCK_short_trid_to_trn);
   my_atomic_storeptr((void **)&short_trid_to_active_trn[cached_short_id], 0);
+  my_atomic_rwlock_rdunlock(&LOCK_short_trid_to_trn);
 
   /*
     we, under the mutex, removed going-in-free_me transactions from the
@@ -534,6 +545,7 @@ static void trnman_free_trn(TRN *trn)
 
   tmp.trn= pool;
 
+  my_atomic_rwlock_wrlock(&LOCK_pool);
   do
   {
     /*
@@ -542,6 +554,7 @@ static void trnman_free_trn(TRN *trn)
     */
     *(TRN * volatile *)&(trn->next)= tmp.trn;
   } while (!my_atomic_casptr((void **)(char*)&pool, &tmp.v, trn));
+  my_atomic_rwlock_wrunlock(&LOCK_pool);
 }
 
 /*
