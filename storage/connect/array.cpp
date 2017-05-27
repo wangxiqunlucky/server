@@ -1035,7 +1035,7 @@ void ARRAY::Printf(PGLOBAL g, FILE *f, uint n)
   } else
     fprintf(f, "%sVALLST: numval=%d\n", m, Nval);
 
-  } // end of Print
+  } // end of Printf
 
 /***********************************************************************/
 /*  Make string output of ARRAY  contents.                             */
@@ -1047,7 +1047,7 @@ void ARRAY::Prints(PGLOBAL, char *ps, uint z)
 
   sprintf(ps, "ARRAY: type=%d\n", Type);
   // More to be implemented later
-  } // end of Print
+  } // end of Prints
 
 /* -------------------------- Class MULAR ---------------------------- */
 

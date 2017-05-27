@@ -1437,7 +1437,7 @@ void FILTER::Printf(PGLOBAL g, FILE *f, uint n)
 
     } // endfor fp
 
-  } // end of Print
+  } // end of Printf
 
 /***********************************************************************/
 /*  Make string output of TABLE contents (z should be checked).        */
@@ -1579,7 +1579,7 @@ void FILTER::Prints(PGLOBAL g, char *ps, uint z)
     bcp = bxp;
     } while (bcp); // enddo
 
-  } // end of Print
+  } // end of Prints
 
 
 /* -------------------- Derived Classes Functions -------------------- */
@@ -1697,8 +1697,6 @@ PFIL PrepareFilter(PGLOBAL g, PFIL fp, bool having)
 
   if (trace)
     htrc("PrepareFilter: fp=%p having=%d\n", fp, having);
-//if (fp)
-//  fp->Print(g, debug, 0);
 
   while (fp) {
     if (fp->Opc == OP_SEP)
@@ -1721,8 +1719,6 @@ PFIL PrepareFilter(PGLOBAL g, PFIL fp, bool having)
 
   if (trace)
     htrc(" returning filp=%p\n", filp);
-//if (filp)
-//  filp->Print(g, debug, 0);
 
   return filp;
   } // end of PrepareFilter

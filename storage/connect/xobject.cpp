@@ -176,7 +176,7 @@ bool CONSTANT::Rephrase(PGLOBAL g, PSZ work)
 void CONSTANT::Printf(PGLOBAL g, FILE *f, uint n)
   {
   Value->Printf(g, f, n);
-  } /* end of Print */
+  } /* end of Printf */
 
 /***********************************************************************/
 /*  Make string output of a constant object.                           */
@@ -184,7 +184,7 @@ void CONSTANT::Printf(PGLOBAL g, FILE *f, uint n)
 void CONSTANT::Prints(PGLOBAL g, char *ps, uint z)
   {
   Value->Prints(g, ps, z);
-  } /* end of Print */
+  } /* end of Prints */
 
 /* -------------------------- Class STRING --------------------------- */
 

@@ -232,7 +232,7 @@ void COLBLK::Printf(PGLOBAL, FILE *f, uint n)
   fprintf(f,
     " coluse=%04X status=%04X buftyp=%d value=%p name=%s\n",
           ColUse, Status, Buf_Type, Value, Name);
-  } // end of Print
+  } // end of Printf
 
 /***********************************************************************/
 /*  Make string output of a column descriptor block.                   */
@@ -240,7 +240,7 @@ void COLBLK::Printf(PGLOBAL, FILE *f, uint n)
 void COLBLK::Prints(PGLOBAL, char *ps, uint)
   {
   sprintf(ps, "R%d.%s", To_Tdb->GetTdb_No(), Name);
-  } // end of Print
+  } // end of Prints
 
 
 /***********************************************************************/

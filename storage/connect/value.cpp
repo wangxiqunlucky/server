@@ -573,7 +573,7 @@ void VALUE::Printf(PGLOBAL g, FILE *f, uint n)
 	else
 		fprintf(f, "%s%s%s", GetCharString(buf), "\n", m);
 
-} /* end of Print */
+} /* end of Printf */
 
 /***********************************************************************/
 /*  Make string output of an object value.                             */
@@ -588,7 +588,7 @@ void VALUE::Prints(PGLOBAL g, char *ps, uint z)
 		p = GetCharString(buf);
 
   strncpy(ps, p, z);
-} // end of Print
+} // end of Prints
 
 /* -------------------------- Class TYPVAL ---------------------------- */
 
@@ -1719,7 +1719,7 @@ void TYPVAL<PSZ>::Prints(PGLOBAL g, char *ps, uint z)
 	else
 		strcat(strncat(strncpy(ps, "\"", z), Strp, z-2), "\"");
 
-} // end of Print
+} // end of Prints
 
 /* -------------------------- Class DECIMAL -------------------------- */
 

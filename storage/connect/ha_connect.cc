@@ -1034,15 +1034,15 @@ PCSZ GetListOption(PGLOBAL g, PCSZ opname, PCSZ oplist, PCSZ def)
     pv= strchr(pk, '=');
 
     if (pv && (!pn || pv < pn)) {
-			n= MY_MIN(pv - pk, (int)sizeof(key) - 1);
+      n= MY_MIN(static_cast<size_t>(pv - pk), sizeof(key) - 1);
       memcpy(key, pk, n);
       key[n]= 0;
       pv++;
-			n= MY_MIN((pn ? pn - pv : strlen(pv)), sizeof(val) - 1);
+      n= MY_MIN((pn ? pn - pv : strlen(pv)), sizeof(val) - 1);
       memcpy(val, pv, n);
       val[n]= 0;
     } else {
-			n= MY_MIN((pn ? pn - pk : strlen(pk)), sizeof(key) - 1);
+      n= MY_MIN((pn ? pn - pk : strlen(pk)), sizeof(key) - 1);
       memcpy(key, pk, n);
       key[n]= 0;
       val[0]= 0;
@@ -1192,7 +1192,7 @@ char *ha_connect::GetRealString(PCSZ s)
 {
   char *sv;
 
-  if (IsPartitioned() && s && *partname) {
+  if (IsPartitioned() && s && partname && *partname) {
     sv= (char*)PlugSubAlloc(xp->g, NULL, 0);
     sprintf(sv, s, partname);
     PlugSubAlloc(xp->g, NULL, strlen(sv) + 1);
@@ -1427,7 +1427,7 @@ void *ha_connect::GetColumnOption(PGLOBAL g, void *field, PCOLINFO pcf)
     case MYSQL_TYPE_VARCHAR:
     case MYSQL_TYPE_VAR_STRING:
       pcf->Flags |= U_VAR;
-      /* fall through */
+      // fall through
     default:
       pcf->Type= MYSQLtoPLG(fp->type(), &v);
       break;
@@ -2802,7 +2802,7 @@ PCFIL ha_connect::CheckCond(PGLOBAL g, PCFIL filp, const Item *cond)
 			case Item_func::LIKE_FUNC:   vop= OP_LIKE; break;
 			case Item_func::ISNOTNULL_FUNC:
 				neg = true;
-				/* fall through */
+				// fall through
 			case Item_func::ISNULL_FUNC: vop= OP_NULL; break;
 			case Item_func::IN_FUNC:     vop= OP_IN;
       case Item_func::BETWEEN:
@@ -4247,8 +4247,8 @@ bool ha_connect::check_privileges(THD *thd, PTOS options, char *dbn, bool quick)
 			} else
         return false;
 
-      /* check FILE_ACL */
-      /* fall through */
+      // check FILE_ACL
+      // fall through
     case TAB_ODBC:
 		case TAB_JDBC:
 		case TAB_MYSQL:

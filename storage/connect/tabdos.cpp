@@ -1308,8 +1308,7 @@ PBF TDBDOS::InitBlockFilter(PGLOBAL g, PFIL filp)
         break;
         } // endif !opm
 
-      // if opm, pass thru
-      /* fall through */
+      // if opm, fall through
     case OP_IN:
       if (filp->GetArgType(0) == TYPE_COLBLK &&
           filp->GetArgType(1) == TYPE_ARRAY) {
@@ -2874,7 +2873,7 @@ bool DOSCOL::AddDistinctValue(PGLOBAL g)
 void DOSCOL::Printf(PGLOBAL g, FILE *f, uint n)
   {
   COLBLK::Printf(g, f, n);
-  } // end of Print
+  } // end of Printf
 
 /* ------------------------------------------------------------------- */
 

@@ -13,11 +13,12 @@
 #define X
 #endif
 
-enum JTYP {TYPE_STRG = 1, 
-           TYPE_DBL = 2,
-           TYPE_BOOL = 4,
-           TYPE_BINT = 5, 
-					 TYPE_INTG = 7,
+enum JTYP {TYPE_STRG = TYPE_STRING, 
+           TYPE_DBL  = TYPE_DOUBLE,
+           TYPE_BOOL = TYPE_TINY,
+           TYPE_BINT = TYPE_BIGINT,
+					 TYPE_DTM  = TYPE_DATE,
+					 TYPE_INTG = TYPE_INT,
 					 TYPE_JSON = 12,
            TYPE_JAR, 
            TYPE_JOB, 
