@@ -1451,7 +1451,7 @@ void TYPVAL<PSZ>::SetValue(uint n)
 
   if (k > Len) {
     sprintf(g->Message, MSG(VALSTR_TOO_LONG), buf, Len);
-    longjmp(g->jumper[g->jump_level], 138);
+    throw 138;
   } else
     SetValue_psz(buf);
 
@@ -1505,7 +1505,7 @@ void TYPVAL<PSZ>::SetValue(ulonglong n)
 
   if (k > Len) {
     sprintf(g->Message, MSG(VALSTR_TOO_LONG), buf, Len);
-    longjmp(g->jumper[g->jump_level], 138);
+    throw 138;
   } else
     SetValue_psz(buf);
 
@@ -2562,7 +2562,7 @@ bool DTVAL::SetValue_pval(PVAL valp, bool chktype)
 			} else if (valp->GetType() == TYPE_BIGINT &&
 				       !(valp->GetBigintValue() % 1000)) {
 				// Assuming that this timestamp is in milliseconds
-				Tval = valp->GetBigintValue() / 1000;
+				Tval = (int)(valp->GetBigintValue() / 1000);
 			}	else
         Tval = valp->GetIntValue();
 
