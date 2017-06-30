@@ -1,4 +1,4 @@
-/* Copyright (C) Olivier Bertrand 2004 - 2015
+/* Copyright (C) MariaDB Corporation Ab
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -24,8 +24,8 @@
   that is a connection with its personnal memory allocation.
 
   @note
-
-*/
+	Author Olivier Bertrand
+	*/
 
 /****************************************************************************/
 /*  Author: Olivier Bertrand  --  bertrandop@gmail.com  --  2004-2015       */
@@ -144,9 +144,9 @@ void user_connect::SetHandler(ha_connect *hc)
 /****************************************************************************/
 /*  Check whether we begin a new query and if so cleanup the previous one.  */
 /****************************************************************************/
-bool user_connect::CheckCleanup(void)
+bool user_connect::CheckCleanup(bool force)
 {
-  if (thdp->query_id > last_query_id) {
+  if (thdp->query_id > last_query_id || force) {
     uint worksize= GetWorkSize();
 
     PlugCleanup(g, true);

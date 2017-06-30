@@ -1,4 +1,4 @@
-/* Copyright (C) Olivier Bertrand 2004 - 2017
+/* Copyright (C) MariaDB Corporation Ab
 
   This program is free software; you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -98,9 +98,8 @@
   rnd_next signals that it has reached the end of its data. Calls to
   ha_connect::extra() are hints as to what will be occuring to the request.
 
-  Happy use!<br>
-    -Olivier
-*/
+	Author  Olivier Bertrand
+	*/
 
 #ifdef USE_PRAGMA_IMPLEMENTATION
 #pragma implementation        // gcc: Class implementation
@@ -4068,7 +4067,7 @@ int ha_connect::info(uint flag)
     if (xmod == MODE_ANY || xmod == MODE_ALTER) {
       // Pure info, not a query
       pure= true;
-      xp->CheckCleanup();
+      xp->CheckCleanup(xmod == MODE_ANY && valid_query_id == 0);
       } // endif xmod
 
     // This is necessary for getting file length
