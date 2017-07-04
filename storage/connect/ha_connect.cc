@@ -1023,37 +1023,55 @@ PCSZ GetListOption(PGLOBAL g, PCSZ opname, PCSZ oplist, PCSZ def)
   if (!oplist)
     return (char*)def;
 
-  char  key[16], val[256];
-  char *pk, *pv, *pn;
-	PCSZ  opval= def;
-  int   n;
+	char  key[16], val[256];
+	char *pv, *pn, *pk = (char*)oplist;
+	PCSZ  opval = def;
+	int   n;
 
-  for (pk= (char*)oplist; pk; pk= ++pn) {
-    pn= strchr(pk, ',');
-    pv= strchr(pk, '=');
+	while (*pk == ' ')
+		pk++;
 
-    if (pv && (!pn || pv < pn)) {
-      n= MY_MIN(static_cast<size_t>(pv - pk), sizeof(key) - 1);
-      memcpy(key, pk, n);
-      key[n]= 0;
-      pv++;
-      n= MY_MIN((pn ? pn - pv : strlen(pv)), sizeof(val) - 1);
-      memcpy(val, pv, n);
-      val[n]= 0;
-    } else {
-      n= MY_MIN((pn ? pn - pk : strlen(pk)), sizeof(key) - 1);
-      memcpy(key, pk, n);
-      key[n]= 0;
-      val[0]= 0;
-    } // endif pv
+	for (; pk; pk = pn) {
+		pn = strchr(pk, ',');
+		pv = strchr(pk, '=');
 
-    if (!stricmp(opname, key)) {
-      opval= PlugDup(g, val);
-      break;
-    } else if (!pn)
-      break;
+		if (pv && (!pn || pv < pn)) {
+			n = MY_MIN(static_cast<size_t>(pv - pk), sizeof(key) - 1);
+			memcpy(key, pk, n);
 
-    } // endfor pk
+			while (n && key[n - 1] == ' ')
+				n--;
+
+			key[n] = 0;
+
+			while (*(++pv) == ' ');
+
+			n = MY_MIN((pn ? pn - pv : strlen(pv)), sizeof(val) - 1);
+			memcpy(val, pv, n);
+
+			while (n && val[n - 1] == ' ')
+				n--;
+
+			val[n] = 0;
+		} else {
+			n = MY_MIN((pn ? pn - pk : strlen(pk)), sizeof(key) - 1);
+			memcpy(key, pk, n);
+
+			while (n && key[n - 1] == ' ')
+				n--;
+
+			key[n] = 0;
+			val[0] = 0;
+		} // endif pv
+
+		if (!stricmp(opname, key)) {
+			opval = PlugDup(g, val);
+			break;
+		} else if (!pn)
+			break;
+
+		while (*(++pn) == ' ');
+	} // endfor pk
 
   return opval;
 } // end of GetListOption
