@@ -1085,6 +1085,7 @@ inline void JsonMemSave(PGLOBAL g)
 /*********************************************************************************/
 inline void JsonFreeMem(PGLOBAL g)
 {
+	g->Activityp = NULL;
 	PlugExit(g);
 } /* end of JsonFreeMem */
 
