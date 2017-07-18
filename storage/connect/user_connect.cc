@@ -25,7 +25,7 @@
 
   @note
 	Author Olivier Bertrand
-	*/
+*/
 
 /****************************************************************************/
 /*  Author: Olivier Bertrand  --  bertrandop@gmail.com  --  2004-2015       */
@@ -111,7 +111,10 @@ bool user_connect::user_init()
 
     int rc= PlugExit(g);
     g= NULL;
-    free(dup);
+
+		if (dup)
+	    free(dup);
+
     return true;
     } // endif g->
 
@@ -152,10 +155,14 @@ bool user_connect::CheckCleanup(bool force)
     PlugCleanup(g, true);
 
     if (g->Sarea_Size != worksize) {
-      if (g->Sarea)
-        free(g->Sarea);
+			if (g->Sarea) {
+				if (trace)
+					htrc("CheckCleanup: Free Sarea %d\n", g->Sarea_Size);
 
-      // Check whether the work area size was changed
+				free(g->Sarea);
+			}	// endif Size
+
+      // Check whether the work area could be allocated
       if (!(g->Sarea = PlugAllocMem(g, worksize))) {
         g->Sarea = PlugAllocMem(g, g->Sarea_Size);
         SetWorkSize(g->Sarea_Size);       // Was too big
@@ -171,7 +178,7 @@ bool user_connect::CheckCleanup(bool force)
     g->Mrr = 0;
     last_query_id= thdp->query_id;
 
-    if (trace)
+    if (trace && !force)
       printf("=====> Begin new query %llu\n", last_query_id);
 
     return true;
