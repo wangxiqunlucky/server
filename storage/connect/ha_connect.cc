@@ -197,11 +197,13 @@ extern "C" {
 			 char *ClassPath;
 #endif   // JDBC_SUPPORT
 
-#if defined(__WIN__)
-CRITICAL_SECTION parsec;      // Used calling the Flex parser
-#else   // !__WIN__
-pthread_mutex_t parmut = PTHREAD_MUTEX_INITIALIZER;
-#endif  // !__WIN__
+//#if defined(__WIN__)
+//CRITICAL_SECTION parsec;      // Used calling the Flex parser
+//#else   // !__WIN__
+//pthread_mutex_t parmut = PTHREAD_MUTEX_INITIALIZER;
+//#endif  // !__WIN__
+pthread_mutex_t parmut;
+pthread_mutex_t usrmut;
 
 /***********************************************************************/
 /*  Utility functions.                                                 */
@@ -674,10 +676,12 @@ static int connect_init_func(void *p)
 
 #if defined(__WIN__)
   sql_print_information("CONNECT: %s", compver);
-	InitializeCriticalSection((LPCRITICAL_SECTION)&parsec);
+//InitializeCriticalSection((LPCRITICAL_SECTION)&parsec);
 #else   // !__WIN__
   sql_print_information("CONNECT: %s", version);
 #endif  // !__WIN__
+	pthread_mutex_init(&parmut, NULL);
+	pthread_mutex_init(&usrmut, NULL);
 
 #if defined(LIBXML2_SUPPORT)
   XmlInitParserLib();
@@ -726,12 +730,13 @@ static int connect_done_func(void *)
 #endif // JDBC_SUPPORT
 
 #if	defined(__WIN__)
-	DeleteCriticalSection((LPCRITICAL_SECTION)&parsec);
+//DeleteCriticalSection((LPCRITICAL_SECTION)&parsec);
 #else   // !__WIN__
 	PROFILE_End();
 #endif  // !__WIN__
 
-  for (pc= user_connect::to_users; pc; pc= pn) {
+	pthread_mutex_lock(&usrmut);
+	for (pc= user_connect::to_users; pc; pc= pn) {
     if (pc->g)
       PlugCleanup(pc->g, true);
 
@@ -739,6 +744,10 @@ static int connect_done_func(void *)
     delete pc;
     } // endfor pc
 
+	pthread_mutex_unlock(&usrmut);
+
+	pthread_mutex_destroy(&usrmut);
+	pthread_mutex_destroy(&parmut);
 	connect_hton= NULL;
   DBUG_RETURN(error);
 } // end of connect_done_func
@@ -851,6 +860,7 @@ ha_connect::~ha_connect(void)
 static void PopUser(PCONNECT xp)
 {
 	if (xp) {
+		pthread_mutex_lock(&usrmut);
 		xp->count--;
 
 		if (!xp->count) {
@@ -875,6 +885,7 @@ static void PopUser(PCONNECT xp)
 			delete xp;
 		} // endif count
 
+		pthread_mutex_unlock(&usrmut);
 	} // endif xp
 
 } // end of PopUser
@@ -888,23 +899,33 @@ static PCONNECT GetUser(THD *thd, PCONNECT xp)
 	if (!thd)
     return NULL;
 
-  if (xp && thd == xp->thdp)
-    return xp;
+	if (xp) {
+		if (thd == xp->thdp)
+			return xp;
 
-  for (xp= user_connect::to_users; xp; xp= xp->next)
+		PopUser(xp);		// Avoid memory leak
+	} // endif xp
+
+	pthread_mutex_lock(&usrmut);
+
+	for (xp= user_connect::to_users; xp; xp= xp->next)
     if (thd == xp->thdp)
       break;
 
-  if (!xp) {
+	if (xp)
+		xp->count++;
+
+	pthread_mutex_unlock(&usrmut);
+
+	if (!xp) {
     xp= new user_connect(thd);
 
     if (xp->user_init()) {
       delete xp;
       xp= NULL;
-      } // endif user_init
+		} // endif user_init
 
-  } else
-    xp->count++;
+	}	// endif xp
 
   return xp;
 } // end of GetUser

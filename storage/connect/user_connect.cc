@@ -47,6 +47,8 @@
 #include "user_connect.h"
 #include "mycat.h"
 
+extern pthread_mutex_t usrmut;
+
 /****************************************************************************/
 /*  Initialize the user_connect static member.                              */
 /****************************************************************************/
@@ -125,15 +127,19 @@ bool user_connect::user_init()
   strcpy(ap->Ap_Name, "CONNECT");
   g->Activityp= ap;
   g->Activityp->Aptr= dup;
-  next= to_users;
+
+	pthread_mutex_lock(&usrmut);
+	next= to_users;
   to_users= this;
 
   if (next)
     next->previous= this;
 
-  last_query_id= thdp->query_id;
   count= 1;
-  return false;
+	pthread_mutex_unlock(&usrmut);
+
+	last_query_id = thdp->query_id;
+	return false;
 } // end of user_init
 
 
