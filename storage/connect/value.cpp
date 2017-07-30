@@ -1658,7 +1658,7 @@ bool TYPVAL<PSZ>::Compute(PGLOBAL g, PVAL *vp, int np, OPVAL op)
   for (i = 0; i < np; i++)
     p[i] = vp[i]->IsNull() ? NULL : vp[i]->GetCharString(val[i]);
 
-	if (p[i]) {
+	if (p[i-1]) {
 		switch (op) {
 			case OP_CNC:
 				assert(np == 1 || np == 2);
