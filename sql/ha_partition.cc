@@ -252,6 +252,7 @@ ha_partition::ha_partition(handlerton *hton, TABLE_SHARE *share)
   , bulk_access_info_first(NULL)
   , bulk_access_info_current(NULL)
   , bulk_access_info_exec_tgt(NULL)
+  , m_need_info_for_auto_inc(FALSE)
 {
   DBUG_ENTER("ha_partition::ha_partition(table)");
   ft_first = NULL;
@@ -283,6 +284,7 @@ ha_partition::ha_partition(handlerton *hton, partition_info *part_info)
   , bulk_access_info_first(NULL)
   , bulk_access_info_current(NULL)
   , bulk_access_info_exec_tgt(NULL)
+  , m_need_info_for_auto_inc(FALSE)
 {
   DBUG_ENTER("ha_partition::ha_partition(part_info)");
   DBUG_ASSERT(part_info);
@@ -321,6 +323,7 @@ ha_partition::ha_partition(handlerton *hton, TABLE_SHARE *share,
   , bulk_access_info_first(NULL)
   , bulk_access_info_current(NULL)
   , bulk_access_info_exec_tgt(NULL)
+  , m_need_info_for_auto_inc(FALSE)
 {
   DBUG_ENTER("ha_partition::ha_partition(clone)");
   ft_first = NULL;
@@ -4268,7 +4271,8 @@ int ha_partition::pre_write_row(uchar * buf)
   */
   if (have_auto_increment)
   {
-    if (!part_share->auto_inc_initialized &&
+    if ((need_info_for_auto_inc() ||
+         !part_share->auto_inc_initialized) &&
         !table_share->next_number_keypart)
     {
       /*
@@ -4394,7 +4398,8 @@ int ha_partition::write_row(uchar * buf)
     */
     if (!bulk_access_executing || !bulk_access_info_exec_tgt->called)
     {
-      if (!part_share->auto_inc_initialized &&
+      if ((need_info_for_auto_inc() ||
+           !part_share->auto_inc_initialized) &&
           !table_share->next_number_keypart)
       {
         /*
@@ -4601,7 +4606,8 @@ exit:
       bitmap_is_set(table->write_set,
                     table->found_next_number_field->field_index))
   {
-    if (!part_share->auto_inc_initialized)
+    if (need_info_for_auto_inc() ||
+        !part_share->auto_inc_initialized)
       info(HA_STATUS_AUTO);
     set_auto_increment_if_higher(table->found_next_number_field);
   }
@@ -8965,7 +8971,7 @@ int ha_partition::info(uint flag)
       DBUG_PRINT("info", ("HA_STATUS_AUTO 1 stats.auto_increment_value=%llu",
                  stats.auto_increment_value));
     }
-    else if (part_share->auto_inc_initialized)
+    else if (!m_need_info_for_auto_inc && part_share->auto_inc_initialized)
     {
       lock_auto_increment();
       stats.auto_increment_value= part_share->next_auto_inc_val;
@@ -8977,7 +8983,7 @@ int ha_partition::info(uint flag)
     {
       lock_auto_increment();
       /* to avoid two concurrent initializations, check again when locked */
-      if (part_share->auto_inc_initialized)
+      if (!m_need_info_for_auto_inc && part_share->auto_inc_initialized)
       {
         stats.auto_increment_value= part_share->next_auto_inc_val;
         DBUG_PRINT("info", ("HA_STATUS_AUTO 3 stats.auto_increment_value=%llu",
@@ -9012,13 +9018,15 @@ int ha_partition::info(uint flag)
         {
           set_if_bigger(part_share->next_auto_inc_val,
                         auto_increment_value);
-          part_share->auto_inc_initialized= true;
+          if (can_use_for_auto_inc_init())
+            part_share->auto_inc_initialized= true;
           DBUG_PRINT("info", ("initializing next_auto_inc_val to %lu",
                        (ulong) part_share->next_auto_inc_val));
         }
       }
       unlock_auto_increment();
     }
+    m_need_info_for_auto_inc= FALSE;
   }
   if (flag & HA_STATUS_VARIABLE)
   {
@@ -11005,6 +11013,60 @@ int ha_partition::cmp_ref(const uchar *ref1, const uchar *ref2)
 /****************************************************************************
                 MODULE auto increment
 ****************************************************************************/
+
+
+/**
+  Determine whether a partition needs auto-increment initialization.
+
+  @return
+    TRUE                    A  partition needs auto-increment initialization
+    FALSE                   No partition needs auto-increment initialization
+
+  m_need_info_for_auto_inc is set to match the return value.
+*/
+
+bool ha_partition::need_info_for_auto_inc()
+{
+  handler **file= m_file;
+  DBUG_ENTER("ha_partition::need_info_for_auto_inc");
+
+  do
+  {
+    if ((*file)->need_info_for_auto_inc())
+    {
+      m_need_info_for_auto_inc= TRUE;
+      DBUG_RETURN(TRUE);
+    }
+  } while (*(++file));
+  m_need_info_for_auto_inc= FALSE;
+  DBUG_RETURN(FALSE);
+}
+
+
+/**
+  Determine if all partitions can use the current auto-increment value for
+  auto-increment initialization.
+
+  @return
+    TRUE                    All partitions can use the current auto-increment
+                            value for auto-increment initialization
+    FALSE                   All partitions cannot use the current
+                            auto-increment value for auto-increment
+                            initialization
+*/
+
+bool ha_partition::can_use_for_auto_inc_init()
+{
+  handler **file= m_file;
+  DBUG_ENTER("ha_partition::can_use_for_auto_inc_init");
+
+  do
+  {
+    if (!(*file)->can_use_for_auto_inc_init())
+      DBUG_RETURN(FALSE);
+  } while (*(++file));
+  DBUG_RETURN(TRUE);
+}
 
 
 int ha_partition::reset_auto_increment(ulonglong value)
