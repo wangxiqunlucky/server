@@ -1202,8 +1202,6 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
 #if defined(ENABLED_PROFILING)
       thd->profiling.discard_current_query();
 #endif
-      if (m_chistics->agg_type == GROUP_AGGREGATE)
-        thd->spcont->quit_func= TRUE;
       break;
     }
 
@@ -1238,11 +1236,7 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
     sql_digest_state *parent_digest= thd->m_digest;
     thd->m_digest= NULL;
 
-    uint prev_ip= ip;
     err_status= i->execute(thd, &ip);
-
-    if (m_chistics->agg_type == NOT_AGGREGATE)
-      thd->spcont->pause_state= FALSE;
 
     thd->m_digest= parent_digest;
 
@@ -1276,8 +1270,6 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
 
     /* Reset sp_rcontext::end_partial_result_set flag. */
     ctx->end_partial_result_set= FALSE;
-    if (prev_ip == ip)
-      break;
 
   } while (!err_status && !thd->killed && !thd->is_fatal_error);
 
@@ -1296,12 +1288,13 @@ sp_head::execute(THD *thd, bool merge_da_on_success)
   thd->restore_active_arena(&execute_arena, &backup_arena);
 
   if (m_chistics->agg_type != GROUP_AGGREGATE ||
-      (m_chistics->agg_type == GROUP_AGGREGATE && thd->spcont->quit_func))
+      (m_chistics->agg_type == GROUP_AGGREGATE && 
+        thd->spcont->agg_func_state == EXIT_STATE))
     thd->spcont->pop_all_cursors(); // To avoid memory leaks after an error
 
   /* Restore all saved */
-  if (m_chistics->agg_type == GROUP_AGGREGATE)
-    thd->spcont->instr_ptr= ip;
+  //if (m_chistics->agg_type == GROUP_AGGREGATE)
+  //  thd->spcont->instr_ptr= ip;
   thd->server_status= (thd->server_status & ~status_backup_mask) | old_server_status;
   old_packet.swap(thd->packet);
   DBUG_ASSERT(thd->change_list.is_empty());
@@ -1926,7 +1919,6 @@ sp_head::execute_aggregate_function(THD *thd, Item **args, uint argcount,
   ulonglong UNINIT_VAR(binlog_save_options);
   sp_rcontext *octx= thd->spcont;
   bool need_binlog_call= FALSE;
-  bool argument_sent= TRUE;
   uint arg_no;
   char buf[STRING_BUFFER_USUAL_SIZE];
   String binlog_buf(buf, sizeof(buf), &my_charset_bin);
@@ -1979,7 +1971,6 @@ sp_head::execute_aggregate_function(THD *thd, Item **args, uint argcount,
     this function call will be finished (e.g. in Item::cleanup()).
     */
     thd->restore_active_arena(&call_arena, &backup_arena);
-    argument_sent= FALSE;
   }
 
   for (arg_no= 0; arg_no < argcount; arg_no++)
@@ -2104,7 +2095,7 @@ sp_head::execute_aggregate_function(THD *thd, Item **args, uint argcount,
     }
   }
 
-  if (!err_status && thd->spcont->quit_func)
+  if (!err_status && thd->spcont->agg_func_state == EXIT_STATE)
   {
     // We need result only in function but not in trigger
 
@@ -4439,20 +4430,28 @@ sp_instr_agg_cfetch::execute(THD *thd, uint *nextp)
     *nextp= m_ip+1;
     thd->spcont->instr_ptr= m_ip+1;
   }
-  else if (!thd->spcont->pause_state)
-    thd->spcont->pause_state= TRUE;
+  else if (thd->spcont->agg_func_state == RUNNING_STATE)
+  {
+      my_message(ER_SP_FETCH_NO_DATA,
+      ER_THD(thd, ER_SP_FETCH_NO_DATA), MYF(0));
+      res=-1;
+      thd->spcont->agg_func_state= PAUSE_STATE;
+      thd->spcont->instr_ptr= m_ip;
+  }
   else
   {
-    thd->spcont->pause_state= FALSE;
     if (thd->server_status == SERVER_STATUS_LAST_ROW_SENT)
     {
       my_message(ER_SP_FETCH_NO_DATA,
         ER_THD(thd, ER_SP_FETCH_NO_DATA), MYF(0));
       res=-1;
-      thd->spcont->quit_func= TRUE;
+      thd->spcont->agg_func_state= EXIT_STATE;
     }
     else
+    {
       *nextp = m_ip+1;
+      thd->spcont->agg_func_state= RUNNING_STATE;
+    }
   }
   DBUG_RETURN(res);
 }

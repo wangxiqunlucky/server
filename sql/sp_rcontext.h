@@ -28,6 +28,13 @@
 // sp_rcontext declaration.
 ///////////////////////////////////////////////////////////////////////////
 
+enum aggregate_func_state
+{
+  RUNNING_STATE= 0,
+  PAUSE_STATE,
+  EXIT_STATE
+};
+
 class sp_cursor;
 class sp_lex_keeper;
 class sp_instr_cpush;
@@ -175,8 +182,7 @@ public:
   /// (if one is found). Otherwise the client will hang due to a violation
   /// of the client/server protocol.
   bool end_partial_result_set;
-  bool pause_state;
-  bool quit_func;
+  enum aggregate_func_state agg_func_state;
   uint instr_ptr;
   
 #ifndef DBUG_OFF
