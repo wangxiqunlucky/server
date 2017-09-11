@@ -1,7 +1,7 @@
 /*****************************************************************************
 
 Copyright (c) 2005, 2016, Oracle and/or its affiliates. All Rights Reserved.
-Copyright (c) 2015, 2016, MariaDB Corporation.
+Copyright (c) 2015, 2017, MariaDB Corporation.
 
 This program is free software; you can redistribute it and/or modify it under
 the terms of the GNU General Public License as published by the Free Software
@@ -40,9 +40,6 @@ Created 13/06/2005 Jan Lindstrom
 #include "row0mysql.h"
 #include "lock0types.h"
 #include "srv0srv.h"
-
-/* Reserve free space from every block for key_version */
-#define ROW_MERGE_RESERVE_SIZE 4
 
 /* Cluster index read task is mandatory */
 #define COST_READ_CLUSTERED_INDEX            1.0
@@ -352,7 +349,7 @@ row_merge_buf_sort(
 Write a merge block to the file system.
 @return TRUE if request was successful, FALSE if fail */
 UNIV_INTERN
-ibool
+bool
 row_merge_write(
 /*============*/
 	int		fd,	/*!< in: file descriptor */
@@ -361,8 +358,8 @@ row_merge_write(
 	const void*	buf,	/*!< in: data */
 	fil_space_crypt_t*	crypt_data,	/*!< in: table crypt data */
 	void*		crypt_buf,		/*!< in: crypt buf or NULL */
-	ulint		space);			/*!< in: space id */
-
+	ulint		space)			/*!< in: space id */
+	MY_ATTRIBUTE((warn_unused_result));
 /********************************************************************//**
 Empty a sort buffer.
 @return sort buffer */
@@ -403,7 +400,8 @@ row_merge_sort(
 	fil_space_crypt_t*	crypt_data,/*!< in: table crypt data */
 	row_merge_block_t*	crypt_block, /*!< in: crypt buf or NULL */
 	ulint			space)	   /*!< in: space id */
-	__attribute__((nonnull(1,2,3,4,5)));
+	MY_ATTRIBUTE((warn_unused_result));
+
 /*********************************************************************//**
 Allocate a sort buffer.
 @return own: sort buffer */
@@ -433,7 +431,7 @@ row_merge_file_destroy(
 Read a merge block from the file system.
 @return TRUE if request was successful, FALSE if fail */
 UNIV_INTERN
-ibool
+bool
 row_merge_read(
 /*===========*/
 	int			fd,	/*!< in: file descriptor */
@@ -443,7 +441,8 @@ row_merge_read(
 	row_merge_block_t*	buf,	/*!< out: data */
 	fil_space_crypt_t*	crypt_data,/*!< in: table crypt data */
 	row_merge_block_t*	crypt_buf, /*!< in: crypt buf or NULL */
-	ulint			space);	   /*!< in: space id */
+	ulint			space)	   /*!< in: space id */
+	MY_ATTRIBUTE((warn_unused_result));
 
 /********************************************************************//**
 Read a merge record.
@@ -465,5 +464,42 @@ row_merge_read_rec(
 	fil_space_crypt_t*	crypt_data,/*!< in: table crypt data */
 	row_merge_block_t*	crypt_block, /*!< in: crypt buf or NULL */
 	ulint			space)	   /*!< in: space id */
-	__attribute__((nonnull(1,2,3,4,6,7,8), warn_unused_result));
+	MY_ATTRIBUTE((warn_unused_result));
+
+/** Encrypt a block.
+@param[in]	crypt_data	crypt data
+@param[in]	offset		buffer offset in file
+@param[in]	space		tablespace id
+@param[in]	input_buf	buffer to encrypt
+@param[out]	crypted_buf	encrypted buffer
+@param[in]	buf_size	buffer size
+@return true if encryption was succesfull, false if not
+*/
+bool
+row_encrypt_buf(
+	fil_space_crypt_t*	crypt_data,
+	os_offset_t		offset,
+	ulint			space,
+	const byte*		input_buf,
+	byte*			crypted_buf,
+	uint			buf_size)
+	MY_ATTRIBUTE((warn_unused_result));
+
+/** Decrypt a block.
+@param[in]	offset		buffer offset in file
+@param[in]	space		tablespace id
+@param[in]	input_buf	buffer to encrypt
+@param[out]	crypted_buf	decrypted buffer
+@param[in]	buf_size	buffer size
+@return true if decryption was succesfull, false if not */
+bool
+row_decrypt_buf(
+	fil_space_crypt_t*	crypt_data,
+	os_offset_t		offset,
+	ulint			space,
+	const byte*		input_buf,
+	byte*			crypted_buf,
+	uint			buf_size)
+	MY_ATTRIBUTE((warn_unused_result));
+
 #endif /* row0merge.h */

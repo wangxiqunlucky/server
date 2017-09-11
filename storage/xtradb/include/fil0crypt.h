@@ -118,7 +118,8 @@ struct fil_space_crypt_t : st_encryption_scheme
 		page0_offset(0),
 		encryption(new_encryption),
 		key_found(0),
-		rotate_state()
+		rotate_state(),
+		key_version_alter(0)
 	{
 		key_id = new_key_id;
 		my_random_bytes(iv, sizeof(iv));
@@ -198,6 +199,11 @@ struct fil_space_crypt_t : st_encryption_scheme
 	uint key_found;
 
 	fil_space_rotate_state_t rotate_state;
+
+	/** Key version used in long lasting operations like
+	ALTER TABLE merge sort temporary files and row log or
+	0 if encryption is not enabled. */
+	uint key_version_alter;
 };
 
 /** Status info about encryption */

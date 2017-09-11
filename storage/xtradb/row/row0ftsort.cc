@@ -224,6 +224,7 @@ row_fts_psort_info_init(
 	common_info->sort_event = os_event_create();
 	common_info->merge_event = os_event_create();
 	common_info->opt_doc_id_size = opt_doc_id_size;
+	common_info->crypt_data = NULL;
 
 	/* Theoretically the tablespace can be dropped straight away.
 	In practice, the DDL completion will wait for this thread to
@@ -234,11 +235,17 @@ row_fts_psort_info_init(
 	}
 
 	if (crypt_data && crypt_data->should_encrypt()) {
-		common_info->crypt_data = crypt_data;
-		encrypted = true;
+		uint key_version = encryption_key_get_latest_version(crypt_data->key_id);
+
+		if (key_version != ENCRYPTION_KEY_VERSION_INVALID) {
+			crypt_data->key_version_alter = key_version;
+			common_info->crypt_data = crypt_data;
+			encrypted = true;
+		} else {
+			crypt_data = NULL;
+		}
 	} else {
 		/* Not needed */
-		common_info->crypt_data = NULL;
 		crypt_data = NULL;
 	}
 
@@ -577,11 +584,9 @@ row_merge_fts_doc_tokenize(
 		cur_len += len;
 		dfield_dup(field, buf->heap);
 
-		/* Reserve one byte for the end marker of row_merge_block_t
-		and we have reserved ROW_MERGE_RESERVE_SIZE (= 4) for
-		encryption key_version in the beginning of the buffer. */
+		/* Reserve one byte for the end marker of row_merge_block_t */
 		if (buf->total_size + data_size[idx] + cur_len
-			>= (srv_sort_buf_size - 1 - ROW_MERGE_RESERVE_SIZE)) {
+			>= (srv_sort_buf_size - 1)) {
 
 			buf_full = TRUE;
 			break;
