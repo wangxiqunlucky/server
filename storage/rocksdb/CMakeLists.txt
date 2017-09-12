@@ -145,11 +145,7 @@ ADD_CONVENIENCE_LIBRARY(rocksdb_aux_lib
 
 ADD_DEPENDENCIES(rocksdb_aux_lib GenError)
 
-# MARIAROCKS-TODO: how to properly depend on -lrt ?
-TARGET_LINK_LIBRARIES(rocksdb_aux_lib rocksdblib ${ZLIB_LIBRARY})
-if (UNIX AND NOT APPLE)
-  TARGET_LINK_LIBRARIES(rocksdb_aux_lib -lrt)
-endif()
+TARGET_LINK_LIBRARIES(rocksdb_aux_lib rocksdblib ${ZLIB_LIBRARY} ${LIBRT})
 
 TARGET_LINK_LIBRARIES(rocksdb rocksdb_aux_lib)
 
@@ -185,9 +181,6 @@ ENDIF()
 #  ADD_SUBDIRECTORY(unittest)
 #ENDIF()
 
-if (UNIX AND NOT APPLE)
-  SET(rocksdb_static_libs ${rocksdb_static_libs} "-lrt")
-endif()
 
 ADD_LIBRARY(rocksdb_tools STATIC
    rocksdb/tools/ldb_tool.cc
