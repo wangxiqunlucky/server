@@ -3005,15 +3005,12 @@ row_log_allocate(
 	fil_space_t* space = fil_space_acquire(index->table->space);
 
 	if (space && space->crypt_data && space->crypt_data->should_encrypt()) {
-		/* Get static key_version that will be used */
-		uint key_version = encryption_key_get_latest_version(space->crypt_data->key_id);
 
-		if (key_version != ENCRYPTION_KEY_VERSION_INVALID) {
+		if (space->crypt_data->key_version_alter != ENCRYPTION_KEY_VERSION_INVALID) {
 			ulint size = srv_sort_buf_size;
 			log->crypt_head = static_cast<byte *>(os_mem_alloc_large(&size));
 			log->crypt_tail = static_cast<byte *>(os_mem_alloc_large(&size));
 			log->crypt_data = space->crypt_data;
-			space->crypt_data->key_version_alter = key_version;
 
 			if (!log->crypt_head || !log->crypt_tail) {
 				fil_space_release(space);

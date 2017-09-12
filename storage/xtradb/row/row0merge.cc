@@ -3999,7 +3999,6 @@ row_merge_build_indexes(
 	uint total_index_blocks = 0;
 	float pct_cost=0;
 	float pct_progress=0;
-	uint  key_version = 0;
 
 	DBUG_ENTER("row_merge_build_indexes");
 
@@ -4031,10 +4030,7 @@ row_merge_build_indexes(
 	/* If tablespace is encrypted, allocate additional buffer for
 	encryption/decryption. */
 	if (crypt_data && crypt_data->should_encrypt()) {
-		/* Get static key_version that will be used */
-		key_version = encryption_key_get_latest_version(crypt_data->key_id);
-
-		if (key_version == ENCRYPTION_KEY_VERSION_INVALID) {
+		if (crypt_data->key_version_alter == ENCRYPTION_KEY_VERSION_INVALID) {
 			fil_space_release(space);
 			DBUG_RETURN(DB_DECRYPTION_FAILED);
 		} else {
@@ -4045,8 +4041,6 @@ row_merge_build_indexes(
 				fil_space_release(space);
 				DBUG_RETURN(DB_OUT_OF_MEMORY);
 			}
-
-			crypt_data->key_version_alter = key_version;
 		}
 	} else {
 		/* Not needed */
